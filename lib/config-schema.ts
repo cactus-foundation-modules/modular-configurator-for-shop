@@ -7,6 +7,7 @@
 // rule product add-ons follows, for the same reason: a catalogue re-import
 // regenerates ids, and a set-up keyed on them would quietly detach every unit.
 import { z } from 'zod'
+import { AUTOMATIC_MODEL_TURN } from '@/modules/modular-configurator-for-shop/lib/model-orientation'
 
 /** Largest footprint a single unit may declare, in millimetres (6 m). */
 export const MAX_UNIT_SIDE_MM = 6000
@@ -18,6 +19,7 @@ const StraightShapeSchema = z.object({
   kind: z.literal('straight'),
   closedLeft: z.boolean(),
   closedRight: z.boolean(),
+  backless: z.boolean().optional(),
 })
 
 const CornerShapeSchema = z.object({
@@ -25,7 +27,22 @@ const CornerShapeSchema = z.object({
   backSide: z.enum(['left', 'right']),
 })
 
-export const PieceShapeSchema = z.discriminatedUnion('kind', [StraightShapeSchema, CornerShapeSchema])
+const CurveShapeSchema = z.object({
+  kind: z.literal('curve'),
+  back: z.enum(['outside', 'inside', 'none']),
+  seatDepthMm: z.number().int().min(50).max(MAX_UNIT_SIDE_MM),
+})
+
+const RoundEndShapeSchema = z.object({
+  kind: z.literal('round-end'),
+})
+
+export const PieceShapeSchema = z.discriminatedUnion('kind', [
+  StraightShapeSchema,
+  CornerShapeSchema,
+  CurveShapeSchema,
+  RoundEndShapeSchema,
+])
 
 export const PieceConfigSchema = z.object({
   /** Slug of the option value this unit is, within the unit option. */
@@ -34,10 +51,14 @@ export const PieceConfigSchema = z.object({
   widthMm: z.number().int().min(50).max(MAX_UNIT_SIDE_MM),
   depthMm: z.number().int().min(50).max(MAX_UNIT_SIDE_MM),
   /**
-   * Quarter turns (in degrees) that bring the unit's 3D model round to face the
-   * shopper. 0 for a file drawn facing forwards, which is the convention.
+   * Quarter turns (in degrees, clockwise from above) that bring the unit's 3D
+   * model round to face the shopper, or 'auto' to work it out from each model
+   * file - the default, and the only setting that copes with a unit whose
+   * variations' files face different ways. A number is the owner overruling it.
    */
-  modelTurnDegrees: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
+  modelTurnDegrees: z
+    .union([z.literal(AUTOMATIC_MODEL_TURN), z.literal(0), z.literal(90), z.literal(180), z.literal(270)])
+    .default(AUTOMATIC_MODEL_TURN),
 })
 
 export const PresetConfigSchema = z.object({

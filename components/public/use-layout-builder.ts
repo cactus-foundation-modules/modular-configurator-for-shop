@@ -12,6 +12,7 @@
 import { useMemo, useReducer } from 'react'
 import {
   addAtEnd,
+  flipEntry,
   removeEntry,
   replaceEntry,
   type ChainLimits,
@@ -46,10 +47,11 @@ interface BuilderState {
 }
 
 export type BuilderAction =
-  | { type: 'start-from'; pieceIds: readonly string[]; unitChoices?: readonly OptionSelection[]; byShopper: boolean }
+  | { type: 'start-from'; units: ReadonlyArray<{ pieceId: string; choices?: OptionSelection; flipped?: boolean }>; byShopper: boolean }
   | { type: 'add'; end: ChainEnd; pieceId: string }
   | { type: 'remove'; entryId: string }
   | { type: 'swap'; entryId: string; pieceId: string }
+  | { type: 'flip'; entryId: string }
   | { type: 'set-unit-choice'; entryId: string; optionId: string; valueId: string | null }
   | { type: 'select'; entryId: string | null }
   | { type: 'undo' }
@@ -110,13 +112,12 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
         let number = state.nextEntryNumber
         const chain: ChainEntry[] = []
         const unitChoices: Record<string, OptionSelection> = {}
-        action.pieceIds.forEach((pieceId, index) => {
-          if (!definitions.has(pieceId) || chain.length >= limits.maxPieces) return
+        action.units.forEach((unit) => {
+          if (!definitions.has(unit.pieceId) || chain.length >= limits.maxPieces) return
           const entryId = entryIdFor(number)
           number += 1
-          chain.push({ entryId, pieceId })
-          const choices = action.unitChoices?.[index]
-          if (choices) unitChoices[entryId] = choices
+          chain.push(unit.flipped ? { entryId, pieceId: unit.pieceId, flipped: true } : { entryId, pieceId: unit.pieceId })
+          if (unit.choices) unitChoices[entryId] = unit.choices
         })
         // A fresh start is not anchored on what was there before: a preset is a
         // new layout, not an edit of the old one.
@@ -142,6 +143,8 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
         const unitChoices = carried ? { ...state.draft.unitChoices, [entryId]: carried } : state.draft.unitChoices
         return commit(state, { chain: result.chain, unitChoices }, { nextEntryNumber: state.nextEntryNumber + 1, selectedEntryId: entryId })
       }
+      case 'flip':
+        return applyEdit(state, flipEntry(state.draft.chain, action.entryId, definitions, limits))
       case 'set-unit-choice': {
         const current = { ...(state.draft.unitChoices[action.entryId] ?? {}) }
         if (action.valueId) current[action.optionId] = action.valueId

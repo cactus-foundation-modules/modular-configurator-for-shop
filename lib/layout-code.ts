@@ -7,7 +7,8 @@
 // Units are separated by ".", in chain order, each named by its option value
 // slug. A unit's own choices follow its slug after "~", as `option-key:value-slug`
 // pairs, where the option key is the same slugified option name shop-variations
-// uses for its own parameters. Slugs, not ids, for the same reason the stored
+// uses for its own parameters. A unit laid the other way round (a curve with no
+// back) carries a bare "~flip", which a link reader that predates it ignores. Slugs, not ids, for the same reason the stored
 // set-up uses them: an id means nothing to the next catalogue import.
 //
 // The parameter has a name of its own rather than reusing shop-variations' one
@@ -21,11 +22,18 @@ export const LAYOUT_PARAM = 'modular-layout'
 const UNIT_SEPARATOR = '.'
 const CHOICE_SEPARATOR = '~'
 const PAIR_SEPARATOR = ':'
+const FLIP_MARK = 'flip'
 
-/** A layout as the code carries it: unit ids in order, each with its own choices. */
+/** One unit as the code carries it. */
+export interface LayoutCodeUnit {
+  pieceId: string
+  choices: OptionSelection
+  flipped: boolean
+}
+
+/** A layout as the code carries it: its units in order. */
 export interface DecodedLayout {
-  pieceIds: string[]
-  unitChoices: OptionSelection[]
+  units: LayoutCodeUnit[]
 }
 
 export interface LayoutCodeVocabulary {
@@ -35,17 +43,13 @@ export interface LayoutCodeVocabulary {
   otherOptions: readonly SvrOptionWithValues[]
 }
 
-export function encodeLayout(
-  pieceIds: readonly string[],
-  unitChoices: readonly OptionSelection[],
-  vocabulary: LayoutCodeVocabulary,
-): string {
-  return pieceIds
-    .map((pieceId, index) => {
-      const slug = vocabulary.pieceSlugById.get(pieceId)
+export function encodeLayout(units: readonly LayoutCodeUnit[], vocabulary: LayoutCodeVocabulary): string {
+  return units
+    .map((unit) => {
+      const slug = vocabulary.pieceSlugById.get(unit.pieceId)
       if (!slug) return null
-      const pairs = encodeChoices(unitChoices[index] ?? {}, vocabulary.otherOptions)
-      return pairs.length > 0 ? [slug, ...pairs].join(CHOICE_SEPARATOR) : slug
+      const parts = [slug, ...(unit.flipped ? [FLIP_MARK] : []), ...encodeChoices(unit.choices, vocabulary.otherOptions)]
+      return parts.join(CHOICE_SEPARATOR)
     })
     .filter((unit): unit is string => unit !== null)
     .join(UNIT_SEPARATOR)
@@ -70,15 +74,15 @@ function encodeChoices(choices: OptionSelection, options: readonly SvrOptionWith
 export function decodeLayout(code: string, vocabulary: LayoutCodeVocabulary): DecodedLayout | null {
   const pieceIdBySlug = new Map([...vocabulary.pieceSlugById].map(([pieceId, slug]) => [slug, pieceId]))
   const optionByKey = new Map(vocabulary.otherOptions.map((option) => [optionParamKey(option.name), option]))
-  const decoded: DecodedLayout = { pieceIds: [], unitChoices: [] }
+  const units: LayoutCodeUnit[] = []
   for (const unit of code.split(UNIT_SEPARATOR)) {
     const parts = unit.split(CHOICE_SEPARATOR)
     const pieceId = pieceIdBySlug.get(parts[0] ?? '')
     if (!pieceId) continue
-    decoded.pieceIds.push(pieceId)
-    decoded.unitChoices.push(decodeChoices(parts.slice(1), optionByKey))
+    const rest = parts.slice(1)
+    units.push({ pieceId, choices: decodeChoices(rest, optionByKey), flipped: rest.includes(FLIP_MARK) })
   }
-  return decoded.pieceIds.length > 0 ? decoded : null
+  return units.length > 0 ? { units } : null
 }
 
 function decodeChoices(pairs: string[], optionByKey: ReadonlyMap<string, SvrOptionWithValues>): OptionSelection {

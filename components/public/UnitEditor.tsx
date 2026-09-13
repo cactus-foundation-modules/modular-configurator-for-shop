@@ -1,8 +1,8 @@
 'use client'
 
 // The panel for one selected unit, opened in place under its row in the list:
-// swap it for another type that still fits, give it choices of its own (a
-// contrasting fabric, say), or take it out.
+// swap it for another type that still fits, curve a backless curve the other
+// way, give it choices of its own (a contrasting fabric, say), or take it out.
 import { useId } from 'react'
 import { SwatchSelect } from '@/modules/modular-configurator-for-shop/components/public/SwatchSelect'
 import { swatchOf } from '@/modules/modular-configurator-for-shop/components/public/swatch-style'
@@ -17,6 +17,12 @@ interface UnitEditorProps {
   otherOptions: readonly SvrOptionWithValues[]
   layoutChoices: OptionSelection
   ownChoices: OptionSelection
+  /** What the unit actually is, option by option. */
+  madeIn: OptionSelection
+  /** Options where the unit is not made in the layout's choice and takes the nearest it is. */
+  adjustedOptionIds: readonly string[]
+  /** Lays the unit the other way round; only for a unit that can be. */
+  onFlip?: () => void
   onSwap: (pieceId: string) => void
   onChoose: (optionId: string, valueId: string | null) => void
   onRemove: () => void
@@ -30,6 +36,9 @@ export function UnitEditor({
   otherOptions,
   layoutChoices,
   ownChoices,
+  madeIn,
+  adjustedOptionIds,
+  onFlip,
   onSwap,
   onChoose,
   onRemove,
@@ -51,8 +60,20 @@ export function UnitEditor({
         </div>
       ) : null}
 
+      {onFlip ? (
+        <div className="mcf-section">
+          <p className="mcf-section-note">This unit has no back, so it can curve either way</p>
+          <div className="mcf-row">
+            <button type="button" className="mcf-chip" onClick={onFlip}>
+              Curve it the other way
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {otherOptions.map((option) => {
-        const layoutValue = option.values.find((value) => value.id === layoutChoices[option.id])
+        const adjusted = adjustedOptionIds.includes(option.id)
+        const layoutValue = option.values.find((value) => value.id === (adjusted ? madeIn[option.id] : layoutChoices[option.id]))
         const own = ownChoices[option.id] ?? ''
         const labelId = `${baseId}-${option.id}-label`
         return (
@@ -67,7 +88,9 @@ export function UnitEditor({
               options={[
                 {
                   value: '',
-                  label: `Same as the layout${layoutValue ? ` (${layoutValue.label})` : ''}`,
+                  label: adjusted
+                    ? `Closest it comes in${layoutValue ? ` (${layoutValue.label})` : ''}`
+                    : `Same as the layout${layoutValue ? ` (${layoutValue.label})` : ''}`,
                   swatch: layoutValue ? swatchOf(layoutValue) : null,
                 },
                 ...option.values.map((value) => ({ value: value.id, label: value.label, swatch: swatchOf(value) })),

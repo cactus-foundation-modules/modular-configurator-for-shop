@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeLayout, encodeLayout, type LayoutCodeVocabulary } from '@/modules/modular-configurator-for-shop/lib/layout-code'
+import { decodeLayout, encodeLayout, type LayoutCodeUnit, type LayoutCodeVocabulary } from '@/modules/modular-configurator-for-shop/lib/layout-code'
 import { suggestPresets } from '@/modules/modular-configurator-for-shop/lib/suggested-presets'
 import {
   describeArrangement,
@@ -33,18 +33,29 @@ function chainOf(...pieceIds: string[]): ChainEntry[] {
 
 describe('the layout link code', () => {
   it('round-trips units in order with each unit’s own choices', () => {
-    const code = encodeLayout(['v-left', 'v-central', 'v-corner'], [{}, { 'opt-fabric': 'v-rivet' }, {}], VOCABULARY)
+    const units: LayoutCodeUnit[] = [
+      { pieceId: 'v-left', choices: {}, flipped: false },
+      { pieceId: 'v-central', choices: { 'opt-fabric': 'v-rivet' }, flipped: false },
+      { pieceId: 'v-corner', choices: {}, flipped: false },
+    ]
+    const code = encodeLayout(units, VOCABULARY)
     expect(code).toBe('left-unit.central-unit~upholstery-colour:rivet-olive.corner-unit')
-    expect(decodeLayout(code, VOCABULARY)).toEqual({
-      pieceIds: ['v-left', 'v-central', 'v-corner'],
-      unitChoices: [{}, { 'opt-fabric': 'v-rivet' }, {}],
-    })
+    expect(decodeLayout(code, VOCABULARY)).toEqual({ units })
+  })
+
+  it('marks a unit laid the other way round, and an older reader simply skips the mark', () => {
+    const units = [{ pieceId: 'v-central', choices: { 'opt-fabric': 'v-rivet' }, flipped: true }]
+    const code = encodeLayout(units, VOCABULARY)
+    expect(code).toBe('central-unit~flip~upholstery-colour:rivet-olive')
+    expect(decodeLayout(code, VOCABULARY)).toEqual({ units })
   })
 
   it('opens an old link on whatever of it still exists', () => {
     expect(decodeLayout('left-unit.withdrawn-unit.right-unit~frame-colour:gold', VOCABULARY)).toEqual({
-      pieceIds: ['v-left', 'v-right'],
-      unitChoices: [{}, {}],
+      units: [
+        { pieceId: 'v-left', choices: {}, flipped: false },
+        { pieceId: 'v-right', choices: {}, flipped: false },
+      ],
     })
     expect(decodeLayout('nothing-here', VOCABULARY)).toBeNull()
   })
@@ -102,6 +113,50 @@ describe('pricing a layout', () => {
     const unchosen = priceLayout(SEATING_PAYLOAD, 'opt-unit', chainOf('v-central'), { 'opt-fabric': 'v-rivet' }, {})
     expect(unchosen.units[0]?.problem).toBe('needs-choice')
     expect(unchosen.retailTotal).toBeNull()
+  })
+
+  it('matches a unit not made in the layout’s choice to the nearest combination it is made in', () => {
+    // Backed units come in a high or low back; the corner only in a standard one.
+    const unit = { ...UNIT_OPTION, id: 'o-unit', values: [
+      { ...UNIT_OPTION.values[0]!, id: 'u-central' },
+      { ...UNIT_OPTION.values[0]!, id: 'u-corner' },
+    ] }
+    const back = { ...FRAME_OPTION, id: 'o-back', values: [
+      { ...FRAME_OPTION.values[0]!, id: 'b-high', position: 0 },
+      { ...FRAME_OPTION.values[0]!, id: 'b-low', position: 1 },
+      { ...FRAME_OPTION.values[0]!, id: 'b-standard', position: 2 },
+    ] }
+    const madeIn = (unitId: string, backId: string, inStock = true) => ({
+      ...SEATING_PAYLOAD.variants[0]!,
+      id: `${unitId}-${backId}`,
+      childProductId: `child-${unitId}-${backId}`,
+      optionValueIds: [unitId, backId],
+      price: 100,
+      inStock,
+    })
+    const payload = {
+      ...SEATING_PAYLOAD,
+      options: [unit, back],
+      variants: [madeIn('u-central', 'b-high'), madeIn('u-central', 'b-low'), madeIn('u-corner', 'b-standard')],
+    }
+    const layout = chainOf('u-central', 'u-corner')
+
+    const inStandard = priceLayout(payload, 'o-unit', layout, { 'o-back': 'b-standard' }, {})
+    // Standard is listed next to Low, so Low is nearer than High.
+    expect(inStandard.units.map((priced) => priced.variant?.childProductId)).toEqual(['child-u-central-b-low', 'child-u-corner-b-standard'])
+    expect(inStandard.units.map((priced) => priced.adjustedOptionIds)).toEqual([['o-back'], []])
+    expect(inStandard.buyable).toBe(true)
+
+    const inHigh = priceLayout(payload, 'o-unit', layout, { 'o-back': 'b-high' }, {})
+    expect(inHigh.units.map((priced) => priced.selection['o-back'])).toEqual(['b-high', 'b-standard'])
+
+    // A choice the unit made for itself is never swapped for a nearer one.
+    const ownHigh = priceLayout(payload, 'o-unit', layout, { 'o-back': 'b-standard' }, { e0: { 'o-back': 'b-high' } })
+    expect(ownHigh.units[0]?.selection['o-back']).toBe('b-high')
+    expect(ownHigh.units[0]?.adjustedOptionIds).toEqual([])
+    const impossible = priceLayout(payload, 'o-unit', layout, { 'o-back': 'b-standard' }, { e1: { 'o-back': 'b-high' } })
+    expect(impossible.units[1]?.problem).toBe('unavailable')
+    expect(impossible.buyable).toBe(false)
   })
 
   it('quotes each unit from its cheapest combination', () => {

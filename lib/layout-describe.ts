@@ -1,20 +1,23 @@
 // Words for a layout: what shape it is, what it is made of, how big it is. Used
 // on the product page, in the builder and on the basket line, so the shopper and
 // whoever packs the order read the same description.
-import { layoutBounds, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { curveLayOf, layoutBounds, layoutIsClosed, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 
-export type LayoutShape = 'straight' | 'l-shape' | 'u-shape' | 'wraparound'
+export type LayoutShape = 'straight' | 'l-shape' | 'u-shape' | 'wraparound' | 'serpentine' | 'back-to-back' | 'island'
 
 const SHAPE_LABELS: Record<LayoutShape, string> = {
   straight: 'Straight',
   'l-shape': 'L-shape',
   'u-shape': 'U-shape',
   wraparound: 'Wraparound',
+  serpentine: 'Serpentine',
+  'back-to-back': 'Back-to-back',
+  island: 'Island',
 }
 
 /**
- * Every corner turns the same way (towards the seats' front - see
- * chain-geometry), so the number of corners alone names the shape.
+ * Turns that all go the same way name the shape by how many there are (see
+ * shapeOfPlaced for the rest).
  */
 export function layoutShapeOf(cornerCount: number): LayoutShape {
   if (cornerCount <= 0) return 'straight'
@@ -27,8 +30,29 @@ export function layoutShapeLabel(shape: LayoutShape): string {
   return SHAPE_LABELS[shape]
 }
 
+/**
+ * Which way each piece turns the chain: +1 towards the seats' front (a corner, a
+ * curve with its back outside), -1 away from it (a curve with its back inside),
+ * 0 for a piece that carries straight on.
+ */
+function quarterTurnOf(piece: PlacedPiece): number {
+  const { shape } = piece.definition
+  if (shape.kind === 'corner') return 1
+  if (shape.kind === 'curve') return curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 1 : -1
+  return 0
+}
+
+/**
+ * A layout that joins up all the way round is an island; one with a rounded
+ * end has rows back to back; one bending both ways is a serpentine. Otherwise
+ * it is named by how many quarter turns it makes, curves counting as corners.
+ */
 export function shapeOfPlaced(placed: readonly PlacedPiece[]): LayoutShape {
-  return layoutShapeOf(placed.filter((piece) => piece.definition.shape.kind === 'corner').length)
+  if (layoutIsClosed(placed)) return 'island'
+  if (placed.some((piece) => piece.definition.shape.kind === 'round-end')) return 'back-to-back'
+  const turns = placed.map(quarterTurnOf).filter((turn) => turn !== 0)
+  if (turns.some((turn) => turn > 0) && turns.some((turn) => turn < 0)) return 'serpentine'
+  return layoutShapeOf(turns.length)
 }
 
 /** "1.84 m" - metres to two places, the way a tape measure would be read out. */

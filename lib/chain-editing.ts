@@ -11,7 +11,9 @@ import {
   acceptsJoinBefore,
   anchorLayout,
   footprintAt,
-  footprintsOverlap,
+  isReversible,
+  layoutIsClosed,
+  piecesOverlap,
   placeChain,
   type ChainEnd,
   type ChainEntry,
@@ -25,6 +27,10 @@ import {
 export type EditRefusal =
   /** The piece at that end has an arm or end panel there. */
   | 'end-is-closed'
+  /** The layout joins up all the way round, so it has no end to add to. */
+  | 'layout-is-closed'
+  /** Only a curve with no back can be turned the other way round. */
+  | 'cannot-flip'
   /** The new piece's arm or end panel would face into the layout. */
   | 'piece-closed-on-joining-side'
   /** The piece would sit on top of another. */
@@ -77,7 +83,7 @@ export function findChainProblem(
 
 function anyFootprintsOverlap(placed: readonly PlacedPiece[]): boolean {
   return placed.some((piece, index) =>
-    placed.slice(index + 1).some((later) => footprintsOverlap(piece.footprint, later.footprint)),
+    placed.slice(index + 1).some((later) => piecesOverlap(piece, later)),
   )
 }
 
@@ -104,6 +110,7 @@ export function endPlan(
   const first = chain[0]
   const last = chain[chain.length - 1]
   if (!first || !last) return end === 'end' ? { insertAt: 0, displacedEntryId: null } : null
+  if (isClosedChain(chain, definitions)) return null
   const edge = end === 'end' ? last : first
   const edgeDefinition = definitions.get(edge.pieceId)
   if (!edgeDefinition) return null
@@ -117,6 +124,26 @@ export function endPlan(
 
 function insertedAt(chain: readonly ChainEntry[], index: number, entry: ChainEntry): ChainEntry[] {
   return [...chain.slice(0, index), entry, ...chain.slice(index)]
+}
+
+/** True when the chain joins up all the way round. */
+export function isClosedChain(chain: readonly ChainEntry[], definitions: ReadonlyMap<string, PieceDefinition>): boolean {
+  if (chain.length < 2 || chain.some((entry) => !definitions.has(entry.pieceId))) return false
+  return layoutIsClosed(placeChain(chain, definitions))
+}
+
+/**
+ * The ways a new entry may be laid: as given, and for a reversible piece the
+ * other way round too. A backless curve goes in whichever way fits, the usual
+ * way first, so a shopper never has to know it could be turned to make room.
+ */
+function waysToLay(entry: ChainEntry, definitions: ReadonlyMap<string, PieceDefinition>): ChainEntry[] {
+  const definition = definitions.get(entry.pieceId)
+  if (!definition || !isReversible(definition)) return [{ entryId: entry.entryId, pieceId: entry.pieceId }]
+  return [
+    { entryId: entry.entryId, pieceId: entry.pieceId, flipped: entry.flipped === true },
+    { entryId: entry.entryId, pieceId: entry.pieceId, flipped: entry.flipped !== true },
+  ]
 }
 
 /** A neighbour it cannot join is, from where the shopper stands, its arm in the way. */
@@ -141,12 +168,19 @@ export function candidatesAtEnd(
   const chain = placed.map((piece) => piece.entry)
   const byId = new Map([...placed.map((piece) => piece.definition), ...definitions].map((definition) => [definition.pieceId, definition]))
   const plan = endPlan(chain, end, byId)
+  const closed = isClosedChain(chain, byId)
   return definitions.map((definition) => {
     if (!plan) {
-      return { definition, pose: ORIGIN_POSE, footprint: footprintAt(definition, ORIGIN_POSE), refusal: 'end-is-closed' }
+      const refusal = closed ? 'layout-is-closed' : 'end-is-closed'
+      return { definition, pose: ORIGIN_POSE, footprint: footprintAt(definition, ORIGIN_POSE), refusal }
     }
-    const trial = insertedAt(chain, plan.insertAt, { entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId })
-    const refusal = placed.length >= limits.maxPieces ? 'too-many-pieces' : refusalForAddition(findChainProblem(trial, byId, limits))
+    const trials = waysToLay({ entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId }, byId).map((probe) => {
+      const trialChain = insertedAt(chain, plan.insertAt, probe)
+      return { trialChain, problem: refusalForAddition(findChainProblem(trialChain, byId, limits)) }
+    })
+    const fitting = trials.find((candidate) => candidate.problem === null) ?? trials[0]
+    const trial = fitting?.trialChain ?? chain
+    const refusal = placed.length >= limits.maxPieces ? 'too-many-pieces' : (fitting?.problem ?? null)
     const trialPlaced = anchorLayout(placeChain(trial, byId), placed, plan.displacedEntryId)
     const marker = trialPlaced.find((piece) => piece.entry.entryId === (plan.displacedEntryId ?? PROBE_ENTRY_ID))
     const pose = marker?.pose ?? ORIGIN_POSE
@@ -174,11 +208,16 @@ export function addAtEnd(
 ): EditResult {
   if (!definitions.has(entry.pieceId)) return { ok: false, refusal: 'unknown-piece' }
   const plan = endPlan(chain, end, definitions)
-  if (!plan) return { ok: false, refusal: 'end-is-closed' }
+  if (!plan) return { ok: false, refusal: isClosedChain(chain, definitions) ? 'layout-is-closed' : 'end-is-closed' }
   if (chain.length >= limits.maxPieces) return { ok: false, refusal: 'too-many-pieces' }
-  const trial = insertedAt(chain, plan.insertAt, entry)
-  const refusal = refusalForAddition(findChainProblem(trial, definitions, limits))
-  return refusal ? { ok: false, refusal } : { ok: true, chain: trial, displacedEntryId: plan.displacedEntryId }
+  let firstRefusal: EditRefusal | null = null
+  for (const laid of waysToLay(entry, definitions)) {
+    const trial = insertedAt(chain, plan.insertAt, laid)
+    const refusal = refusalForAddition(findChainProblem(trial, definitions, limits))
+    if (!refusal) return { ok: true, chain: trial, displacedEntryId: plan.displacedEntryId }
+    firstRefusal ??= refusal
+  }
+  return { ok: false, refusal: firstRefusal ?? 'would-overlap' }
 }
 
 /** Removes one piece; its neighbours close up and join each other. */
@@ -211,8 +250,32 @@ export function replaceEntry(
 ): EditResult {
   const index = chain.findIndex((entry) => entry.entryId === entryId)
   if (index === -1) return { ok: false, refusal: 'unknown-entry' }
+  let firstRefusal: EditResult | null = null
+  for (const laid of waysToLay(replacement, definitions)) {
+    const next = [...chain]
+    next[index] = laid
+    const result = checked(next, definitions, limits)
+    if (result.ok) return result
+    firstRefusal ??= result
+  }
+  return firstRefusal ?? { ok: false, refusal: 'unknown-piece' }
+}
+
+/** Lays a reversible unit (a curve with no back) the other way round. */
+export function flipEntry(
+  chain: readonly ChainEntry[],
+  entryId: string,
+  definitions: ReadonlyMap<string, PieceDefinition>,
+  limits: ChainLimits,
+): EditResult {
+  const index = chain.findIndex((entry) => entry.entryId === entryId)
+  const current = chain[index]
+  if (!current) return { ok: false, refusal: 'unknown-entry' }
+  const definition = definitions.get(current.pieceId)
+  if (!definition) return { ok: false, refusal: 'unknown-piece' }
+  if (!isReversible(definition)) return { ok: false, refusal: 'cannot-flip' }
   const next = [...chain]
-  next[index] = replacement
+  next[index] = { entryId: current.entryId, pieceId: current.pieceId, flipped: current.flipped !== true }
   return checked(next, definitions, limits)
 }
 

@@ -35,12 +35,17 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
 2. On the product's edit screen, open **Layout builder**:
    - tick **Show the layout builder on this product**;
    - pick the option whose values are the units;
-   - tick each unit and say how it joins (no arms, arm on the left, arm on the right,
-     arms both sides, or a corner with its second back on the left or right - always as
-     seen from the front), its footprint in millimetres, and whether its 3D model needs
-     turning to face forwards;
+   - tick each unit and say how it joins - no arms (with or without a back), arm on the
+     left, arm on the right, arms both sides, a corner with its second back on the left or
+     right, a quarter-circle curve with its back outside, inside or no back at all, or a
+     rounded end that wraps one row round to the row behind it - always as seen from the
+     front; its footprint in millimetres (a curve's size and seat depth); and how its 3D
+     model is turned. Leave that on **Work it out from each model**: supplier files face
+     every which way, often differently from one variation to the next, and the builder
+     turns each file to match the shape it was told the unit is (`lib/model-orientation.ts`);
    - optionally write ready-made layouts. With none, shoppers are offered a pair, a row
-     of three, an L and a U, built from the units ticked, wherever the range can make them.
+     of three, an L, a U, a booth, a round island and a capsule island, built from the
+     units ticked, wherever the range can make them.
 
 ## How a layout goes together
 
@@ -51,13 +56,24 @@ product photographs show them). So:
 - a unit with an arm on its left can only start a layout, one with an arm on its right
   can only finish it;
 - a corner turns the chain towards the seats' front, and the unit after it always lands
-  against the corner's open side with its back in line with the corner's second back.
+  against the corner's open side with its back in line with the corner's second back;
+- a curve with its back outside turns towards the seats' front too (three make a booth),
+  one with its back inside turns away from it (four make a round island), and one with no
+  back goes whichever way fits - the shopper can turn it round from its panel;
+- a rounded end joins the end of one row to the end of the row behind it, back to back,
+  so two rounded ends and two rows make a capsule island. A layout that joins up all the
+  way round has no ends left to add to.
 
 `lib/chain-geometry.ts` places every unit from that one rule (a "turtle walk" gluing
 each unit's entry face to the previous unit's exit face) and `lib/chain-editing.ts`
-refuses any edit that would put an arm in the middle, overlap two units or exceed the
-size limit. The 3D view, the plan, the price and the basket all read the same placement,
-so they cannot disagree.
+refuses any edit that would put an arm in the middle, overlap two units (by their real
+outlines, not the boxes round them) or exceed the size limit. The 3D view, the plan, the
+price and the basket all read the same placement, so they cannot disagree.
+
+Options other than the unit are chosen once for the layout. A unit not made in the
+layout's choice - a backless unit that only comes in a standard back, say - is matched to
+the nearest combination it is made in, and its row says what it is in
+(`lib/layout-pricing.ts`).
 
 ## What the shopper gets
 
@@ -80,6 +96,7 @@ so they cannot disagree.
   plan does everything the 3D view does, by keyboard.
 - **Both tabs share one set of choices**: a fabric picked in either is picked in the other.
 - **A link that reopens the layout**: `?modular-layout=left-unit.central-unit~upholstery-colour:rivet-olive.corner-unit`.
+  A backless curve laid the other way round carries `~flip`.
 - **One grouped set of basket lines** - one line per distinct variation, repeats folded
   into a quantity, the first unit heading the group with the layout's shape and
   arrangement written on it for whoever packs the order.

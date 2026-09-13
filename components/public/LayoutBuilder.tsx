@@ -95,7 +95,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       pieceSlugById: new Map(storefront.pieces.map((piece) => [piece.pieceId, piece.valueSlug])),
       otherOptions: otherOptionsOf(payload, storefront.pieceOptionId),
     })
-    if (decoded) dispatch({ type: 'start-from', pieceIds: decoded.pieceIds, unitChoices: decoded.unitChoices, byShopper: false })
+    if (decoded) dispatch({ type: 'start-from', units: decoded.units, byShopper: false })
   }, [payload, storefront.pieces, storefront.pieceOptionId, dispatch])
 
   // Keep the address bar in step with the shopper's edits (never before one).
@@ -212,7 +212,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         onStartPreset={(key) => {
           const preset = storefront.presets[Number(key)]
           if (!preset) return
-          dispatch({ type: 'start-from', pieceIds: preset.pieceIds, byShopper: true })
+          dispatch({ type: 'start-from', units: preset.pieceIds.map((pieceId) => ({ pieceId })), byShopper: true })
           setStatusText(null)
         }}
         onDesignOwn={() => {

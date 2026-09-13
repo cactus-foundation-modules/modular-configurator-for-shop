@@ -4,6 +4,7 @@
 // joins, its footprint, and which way its model needs turning.
 import { useState } from 'react'
 import type { PieceConfig } from '@/modules/modular-configurator-for-shop/lib/config-schema'
+import { AUTOMATIC_MODEL_TURN } from '@/modules/modular-configurator-for-shop/lib/model-orientation'
 import type { AdminOptionValue } from '@/modules/modular-configurator-for-shop/lib/admin-payload'
 import {
   SHAPE_CHOICES,
@@ -20,6 +21,7 @@ interface PieceSetupRowProps {
 }
 
 const TURNS: ReadonlyArray<{ value: PieceConfig['modelTurnDegrees']; label: string }> = [
+  { value: AUTOMATIC_MODEL_TURN, label: 'Work it out from each model (recommended)' },
   { value: 0, label: 'Faces forwards already' },
   { value: 90, label: 'Turn a quarter clockwise' },
   { value: 180, label: 'Turn right round' },
@@ -30,13 +32,21 @@ const TURNS: ReadonlyArray<{ value: PieceConfig['modelTurnDegrees']; label: stri
 const FALLBACK_SIDE_MM = 700
 
 export function newPieceFor(value: AdminOptionValue): PieceConfig {
-  return {
-    valueSlug: value.slug,
-    shape: shapeFromChoice(guessShapeFromLabel(value.label)),
-    widthMm: value.suggestedWidthMm ?? FALLBACK_SIDE_MM,
-    depthMm: value.suggestedDepthMm ?? FALLBACK_SIDE_MM,
-    modelTurnDegrees: 0,
-  }
+  const shape = shapeFromChoice(guessShapeFromLabel(value.label))
+  const widthMm = value.suggestedWidthMm ?? FALLBACK_SIDE_MM
+  const depthMm = value.suggestedDepthMm ?? FALLBACK_SIDE_MM
+  return withShape({ valueSlug: value.slug, shape, widthMm, depthMm, modelTurnDegrees: AUTOMATIC_MODEL_TURN }, shape)
+}
+
+/**
+ * A unit given a new shape, with its sizes kept sensible for it: a curve's
+ * footprint is a square as big as the curve, and its seat fits inside that.
+ */
+function withShape(piece: PieceConfig, shape: PieceConfig['shape']): PieceConfig {
+  if (shape.kind !== 'curve') return { ...piece, shape }
+  const size = Math.max(piece.widthMm, piece.depthMm)
+  const seatDepthMm = Math.min(shape.seatDepthMm, size - 50)
+  return { ...piece, widthMm: size, depthMm: size, shape: { ...shape, seatDepthMm } }
 }
 
 /**
@@ -74,6 +84,22 @@ function MillimetreInput({ label, value, onCommit }: { label: string; value: num
   )
 }
 
+function curveBack(piece: PieceConfig): 'outside' | 'inside' | 'none' {
+  return piece.shape.kind === 'curve' ? piece.shape.back : 'outside'
+}
+
+/** What the sizes mean for this kind of unit, in the owner's words. */
+function shapeHint(piece: PieceConfig): string {
+  switch (piece.shape.kind) {
+    case 'curve':
+      return 'A quarter of a circle. Its size is the width (and depth) of the whole curve from the outside; its seat depth is how deep each cut end is, which should match the units it joins.'
+    case 'round-end':
+      return 'Width is the flat side, which joins two rows sat back to back. Depth is how far the rounded part sticks out.'
+    default:
+      return 'Width is across the front of the unit; depth is from the back to the front of the seat.'
+  }
+}
+
 export function PieceSetupRow({ value, piece, onChange }: PieceSetupRowProps) {
   const id = `mcf-piece-${value.slug}`
   const hasSuggestion = value.suggestedWidthMm !== null && value.suggestedDepthMm !== null
@@ -101,7 +127,7 @@ export function PieceSetupRow({ value, piece, onChange }: PieceSetupRowProps) {
               value={choiceFromShape(piece.shape)}
               onChange={(event) => {
                 const choice = SHAPE_CHOICES.find((candidate) => candidate.value === event.target.value)
-                if (choice) onChange({ ...piece, shape: shapeFromChoice(choice.value) })
+                if (choice) onChange(withShape(piece, shapeFromChoice(choice.value, piece.shape)))
               }}
             >
               {SHAPE_CHOICES.map((choice) => (
@@ -111,8 +137,25 @@ export function PieceSetupRow({ value, piece, onChange }: PieceSetupRowProps) {
               ))}
             </select>
           </label>
-          <MillimetreInput label="Width (mm)" value={piece.widthMm} onCommit={(widthMm) => onChange({ ...piece, widthMm })} />
-          <MillimetreInput label="Depth (mm)" value={piece.depthMm} onCommit={(depthMm) => onChange({ ...piece, depthMm })} />
+          {piece.shape.kind === 'curve' ? (
+            <>
+              <MillimetreInput
+                label="Size of the curve (mm)"
+                value={piece.widthMm}
+                onCommit={(size) => onChange({ ...piece, widthMm: size, depthMm: size })}
+              />
+              <MillimetreInput
+                label="Seat depth (mm)"
+                value={piece.shape.seatDepthMm}
+                onCommit={(seatDepthMm) => onChange({ ...piece, shape: { kind: 'curve', back: curveBack(piece), seatDepthMm } })}
+              />
+            </>
+          ) : (
+            <>
+              <MillimetreInput label="Width (mm)" value={piece.widthMm} onCommit={(widthMm) => onChange({ ...piece, widthMm })} />
+              <MillimetreInput label="Depth (mm)" value={piece.depthMm} onCommit={(depthMm) => onChange({ ...piece, depthMm })} />
+            </>
+          )}
           <label style={{ display: 'grid', gap: '0.25rem' }}>
             <span style={labelStyle}>3D model</span>
             <select
@@ -143,6 +186,7 @@ export function PieceSetupRow({ value, piece, onChange }: PieceSetupRowProps) {
           ) : null}
         </div>
       ) : null}
+      {piece ? <p style={{ ...hintStyle, paddingLeft: '1.5rem' }}>{shapeHint(piece)}</p> : null}
       {piece && !hasSuggestion ? (
         <p style={{ ...hintStyle, paddingLeft: '1.5rem' }}>
           No overall width and depth in this unit&apos;s specification, so the sizes are yours to type in.

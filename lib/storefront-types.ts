@@ -3,6 +3,7 @@
 // and Puck deep-copies block props on the way in (a Date would arrive as {}).
 import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { P3dFormat } from '@/modules/product-3d-views-for-shop/lib/formats'
+import type { PieceConfig } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 
 /** One kind of unit the shopper can place. `pieceId` is the option value id. */
 export interface StorefrontPiece {
@@ -10,8 +11,8 @@ export interface StorefrontPiece {
   valueSlug: string
   label: string
   definition: PieceDefinition
-  /** Quarter turns that bring the model round to face the shopper. */
-  modelTurnDegrees: 0 | 90 | 180 | 270
+  /** Quarter turns that bring the model round to face the shopper, or 'auto' to work them out per file. */
+  modelTurnDegrees: PieceConfig['modelTurnDegrees']
   /**
    * A model file for the unit, already signed, used when the variation has no
    * painted bundle of its own (no fabric set-up on the 3D views side). Null

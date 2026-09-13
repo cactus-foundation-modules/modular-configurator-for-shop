@@ -48,6 +48,22 @@ describe('the set-up screen’s unit shapes', () => {
       'corner-back-left',
     ])
   })
+
+  it('guesses curves, rounded ends and backless units from how rounded ranges name them', () => {
+    expect(
+      ['90 Degree Outer Curved Unit', '90 Degree Inner Curved Unit', '90 Degree Backless Curved Unit', 'D End Unit', 'Central Backless Unit'].map(
+        guessShapeFromLabel,
+      ),
+    ).toEqual(['curve-back-outside', 'curve-back-inside', 'curve-backless', 'round-end', 'middle-backless'])
+  })
+
+  it('keeps a curve’s seat depth when it changes to another kind of curve', () => {
+    expect(shapeFromChoice('curve-backless', { kind: 'curve', back: 'outside', seatDepthMm: 710 })).toEqual({
+      kind: 'curve',
+      back: 'none',
+      seatDepthMm: 710,
+    })
+  })
 })
 
 describe('checking a set-up before it is saved', () => {
@@ -73,6 +89,28 @@ describe('checking a set-up before it is saved', () => {
   it('reads a damaged stored row as not set up rather than breaking the page', () => {
     expect(parseStoredConfig({ pieceOptionName: 'Unit', pieces: 'nonsense' }).pieces).toEqual([])
     expect(parseStoredConfig(CONFIG)).toEqual(CONFIG)
+  })
+
+  it('keeps a turn the owner chose, and works out the turn for a unit that has none', () => {
+    const [left, ...rest] = CONFIG.pieces
+    const { modelTurnDegrees: _dropped, ...withoutTurn } = left ?? CONFIG.pieces[0]!
+    const stored = parseStoredConfig({ ...CONFIG, pieces: [withoutTurn, ...rest] })
+    expect(stored.pieces.map((piece) => piece.modelTurnDegrees)).toEqual(['auto', 0, 0, 0])
+  })
+
+  it('refuses a curve whose sizes cannot be a quarter of a circle', () => {
+    const curved = (widthMm: number, depthMm: number, seatDepthMm: number): ConfiguratorConfig => ({
+      ...CONFIG,
+      presets: [],
+      pieces: [{ valueSlug: 'corner-unit', shape: { kind: 'curve', back: 'outside', seatDepthMm }, widthMm, depthMm, modelTurnDegrees: 'auto' }],
+    })
+    expect(validateConfigAgainstOptions({ enabled: true, config: curved(1200, 1200, 710) }, [UNIT_OPTION])).toBeNull()
+    expect(validateConfigAgainstOptions({ enabled: true, config: curved(1200, 900, 710) }, [UNIT_OPTION])).toBe(
+      'Corner Unit is curved, so its width and depth are both the size of the curve and must match',
+    )
+    expect(validateConfigAgainstOptions({ enabled: true, config: curved(700, 700, 710) }, [UNIT_OPTION])).toBe(
+      'Corner Unit has a seat deeper than the curve it sits in',
+    )
   })
 })
 

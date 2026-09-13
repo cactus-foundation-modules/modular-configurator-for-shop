@@ -8,6 +8,10 @@ export function refusalSentence(refusal: EditRefusal, maxPieces: number): string
   switch (refusal) {
     case 'end-is-closed':
       return 'That end finishes with an arm, so nothing can join on there.'
+    case 'layout-is-closed':
+      return 'Your layout joins up all the way round, so there is no end left to add to.'
+    case 'cannot-flip':
+      return 'Only a curved unit with no back can be turned the other way round.'
     case 'piece-closed-on-joining-side':
       return 'Its arm would face into the layout. Try it on the other end.'
     case 'would-overlap':
@@ -27,6 +31,10 @@ export function refusalHint(refusal: EditRefusal, maxPieces: number): string {
   switch (refusal) {
     case 'end-is-closed':
       return 'This end already finishes with an arm'
+    case 'layout-is-closed':
+      return 'The layout already joins up all the way round'
+    case 'cannot-flip':
+      return 'Only a curve with no back turns round'
     case 'piece-closed-on-joining-side':
       return 'Its arm would face into the layout'
     case 'would-overlap':

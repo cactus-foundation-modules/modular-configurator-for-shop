@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatMoney } from '@/modules/shop/lib/money'
 import { swapOptions } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { priceLayout } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { refusalSentence, unitProblemSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
 import type { ConfiguratorStorefrontPayload } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
@@ -204,10 +205,14 @@ export function LayoutWorkspace({
           <ol className="mcf-units">
             {view.price.units.map((unit, index) => {
               const own = draft.unitChoices[unit.entry.entryId] ?? {}
+              // The unit's own choices, and any option it could only be matched
+              // to the nearest combination it is made in: either way, not the layout's.
               const ownLabels = otherOptions.flatMap((option) => {
-                const value = option.values.find((candidate) => candidate.id === own[option.id])
+                const differs = Boolean(own[option.id]) || unit.adjustedOptionIds.includes(option.id)
+                const value = differs ? option.values.find((candidate) => candidate.id === unit.selection[option.id]) : undefined
                 return value ? [value.label] : []
               })
+              const definition = definitions.get(unit.entry.pieceId)
               const selected = unit.entry.entryId === selectedEntryId
               const panelId = `mcf-unit-panel-${unit.entry.entryId}`
               return (
@@ -240,6 +245,9 @@ export function LayoutWorkspace({
                         otherOptions={otherOptions}
                         layoutChoices={layoutChoices}
                         ownChoices={own}
+                        madeIn={unit.selection}
+                        adjustedOptionIds={unit.adjustedOptionIds}
+                        onFlip={definition && isReversible(definition) ? () => dispatch({ type: 'flip', entryId: unit.entry.entryId }) : undefined}
                         onSwap={(pieceId) => dispatch({ type: 'swap', entryId: unit.entry.entryId, pieceId })}
                         onChoose={(optionId, valueId) => dispatch({ type: 'set-unit-choice', entryId: unit.entry.entryId, optionId, valueId })}
                         onRemove={() => dispatch({ type: 'remove', entryId: unit.entry.entryId })}
@@ -256,13 +264,16 @@ export function LayoutWorkspace({
 
       {otherOptions.map((option) => {
         const chosen = option.values.find((value) => value.id === layoutChoices[option.id])
+        const somewhereElse = view.price.units.some((unit) => unit.adjustedOptionIds.includes(option.id))
         return (
           <section key={option.id} className="mcf-section" aria-labelledby={`mcf-option-${option.id}`}>
             <div className="mcf-section-head">
               <h3 id={`mcf-option-${option.id}`} className="mcf-section-title">
                 {option.name}
               </h3>
-              <p className="mcf-section-note">{chosen ? `${chosen.label}, every unit` : 'Every unit'}</p>
+              <p className="mcf-section-note">
+                {chosen ? (somewhereElse ? `${chosen.label} wherever a unit comes in it` : `${chosen.label}, every unit`) : 'Every unit'}
+              </p>
             </div>
             <OptionChoices
               option={option}

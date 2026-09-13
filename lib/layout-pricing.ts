@@ -20,6 +20,12 @@ export interface PricedUnit {
   selection: OptionSelection
   variant: VariantSelectorVariant | null
   problem: UnitProblem | null
+  /**
+   * Options where this unit is not in the layout's choice, because it is not
+   * made in it, and was matched to the nearest combination it is made in. The
+   * unit's own choices are never among them.
+   */
+  adjustedOptionIds: string[]
 }
 
 export interface LayoutPrice {
@@ -46,12 +52,92 @@ export function unitSelection(
   return { ...layoutChoices, ...(ownChoices ?? {}), [pieceOptionId]: entry.pieceId }
 }
 
-function priceUnit(payload: VariantSelectorPayload, entry: ChainEntry, selection: OptionSelection): PricedUnit {
+function priceUnit(
+  payload: VariantSelectorPayload,
+  entry: ChainEntry,
+  pieceOptionId: string,
+  layoutChoices: OptionSelection,
+  ownChoices: OptionSelection | undefined,
+): PricedUnit {
+  const selection = unitSelection(entry, pieceOptionId, layoutChoices, ownChoices)
   const needsChoice = payload.options.some((option) => !selection[option.id])
-  if (needsChoice) return { entry, selection, variant: null, problem: 'needs-choice' }
-  const variant = resolveVariant(payload, selection)
-  if (!variant || !variant.enabled) return { entry, selection, variant: null, problem: 'unavailable' }
-  return { entry, selection, variant, problem: variant.inStock ? null : 'out-of-stock' }
+  if (needsChoice) return { entry, selection, variant: null, problem: 'needs-choice', adjustedOptionIds: [] }
+  const exact = resolveVariant(payload, selection)
+  if (exact && exact.enabled) {
+    return { entry, selection, variant: exact, problem: exact.inStock ? null : 'out-of-stock', adjustedOptionIds: [] }
+  }
+  const nearest = nearestMadeCombination(payload, pieceOptionId, selection, ownChoices ?? {})
+  if (!nearest) return { entry, selection, variant: null, problem: 'unavailable', adjustedOptionIds: [] }
+  return {
+    entry,
+    selection: nearest.selection,
+    variant: nearest.variant,
+    problem: nearest.variant.inStock ? null : 'out-of-stock',
+    adjustedOptionIds: nearest.adjustedOptionIds,
+  }
+}
+
+interface NearestCombination {
+  variant: VariantSelectorVariant
+  selection: OptionSelection
+  adjustedOptionIds: string[]
+}
+
+/**
+ * The switched-on variation of this unit that departs least from the layout's
+ * choices, keeping every choice the unit made for itself.
+ *
+ * A range whose units do not all come in every value - backless units only in a
+ * standard back, backed ones only high or low - otherwise has no layout-wide
+ * choice under which a mixed layout can be bought at all. Nearest means fewest
+ * options changed, then values closest in the option's own order (so "Standard"
+ * finds "Low Back" before "High Back" when that is how the owner listed them),
+ * then in stock before out of stock.
+ */
+function nearestMadeCombination(
+  payload: VariantSelectorPayload,
+  pieceOptionId: string,
+  wanted: OptionSelection,
+  ownChoices: OptionSelection,
+): NearestCombination | null {
+  const others = payload.options.filter((option) => option.id !== pieceOptionId)
+  let best: { combination: NearestCombination; rank: [number, number, number] } | null = null
+  for (const variant of payload.variants) {
+    if (!variant.enabled || !variant.optionValueIds.includes(wanted[pieceOptionId] ?? '')) continue
+    const selection: OptionSelection = { [pieceOptionId]: wanted[pieceOptionId] ?? '' }
+    const adjustedOptionIds: string[] = []
+    let distance = 0
+    let keepsOwnChoices = true
+    for (const option of others) {
+      const valueHere = option.values.find((value) => variant.optionValueIds.includes(value.id))
+      if (!valueHere) {
+        keepsOwnChoices = false
+        break
+      }
+      selection[option.id] = valueHere.id
+      if (valueHere.id === wanted[option.id]) continue
+      if (ownChoices[option.id]) {
+        keepsOwnChoices = false
+        break
+      }
+      adjustedOptionIds.push(option.id)
+      const wantedPosition = option.values.findIndex((value) => value.id === wanted[option.id])
+      const herePosition = option.values.indexOf(valueHere)
+      distance += Math.abs(herePosition - wantedPosition)
+    }
+    if (!keepsOwnChoices) continue
+    const rank: [number, number, number] = [adjustedOptionIds.length, distance, variant.inStock ? 0 : 1]
+    if (!best || compareRanks(rank, best.rank) < 0) best = { combination: { variant, selection, adjustedOptionIds }, rank }
+  }
+  return best?.combination ?? null
+}
+
+function compareRanks(first: readonly number[], second: readonly number[]): number {
+  for (let index = 0; index < first.length; index += 1) {
+    const difference = (first[index] ?? 0) - (second[index] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return 0
 }
 
 export function priceLayout(
@@ -61,9 +147,7 @@ export function priceLayout(
   layoutChoices: OptionSelection,
   unitChoices: Readonly<Record<string, OptionSelection>>,
 ): LayoutPrice {
-  const units = chain.map((entry) =>
-    priceUnit(payload, entry, unitSelection(entry, pieceOptionId, layoutChoices, unitChoices[entry.entryId])),
-  )
+  const units = chain.map((entry) => priceUnit(payload, entry, pieceOptionId, layoutChoices, unitChoices[entry.entryId]))
   const resolved = units.flatMap((unit) => (unit.variant ? [unit.variant] : []))
   const total = sumOf(resolved.map((variant) => variant.price))
   const allResolved = resolved.length === units.length && units.length > 0

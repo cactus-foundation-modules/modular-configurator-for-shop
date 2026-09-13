@@ -8,12 +8,15 @@
 //
 // Drawn in millimetres, straight from the placement maths: the SVG's y axis runs
 // towards the shopper exactly as the layout's z does, so nothing is flipped.
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, ReactElement } from 'react'
 import {
+  curveCentre,
+  curveLayOf,
   layoutBounds,
   pointOnPiece,
   type ChainEnd,
   type FloorRectangle,
+  type FloorVector,
   type PlacedPiece,
 } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { formatMetres } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
@@ -135,36 +138,106 @@ interface PlanUnitProps {
   onSelect?: (entryId: string) => void
 }
 
-function PlanUnit({ piece, number, label, fontSize, interactive, selected, onSelect }: PlanUnitProps) {
+/**
+ * A quarter of a ring as an SVG path, in the piece's own frame: between two
+ * radii, from the direction `from` round to the direction `to` about `centre`.
+ */
+function ringPath(centre: FloorVector, innerRadius: number, outerRadius: number, from: FloorVector, to: FloorVector): string {
+  // The SVG y axis is the layout's z, so a positive cross product is clockwise on screen.
+  const sweep = from.x * to.z - from.z * to.x > 0 ? 1 : 0
+  const at = (radius: number, direction: FloorVector) => `${centre.x + radius * direction.x} ${centre.z + radius * direction.z}`
+  return [
+    `M ${at(outerRadius, from)}`,
+    `A ${outerRadius} ${outerRadius} 0 0 ${sweep} ${at(outerRadius, to)}`,
+    `L ${at(innerRadius, to)}`,
+    `A ${innerRadius} ${innerRadius} 0 0 ${1 - sweep} ${at(innerRadius, from)}`,
+    'Z',
+  ].join(' ')
+}
+
+/** The piece's outline, backrest and arms, in its own frame, and where its number goes. */
+function planShapeOf(piece: PlacedPiece): { body: ReactElement; numberAt: FloorVector } {
   const { widthMm: width, depthMm: depth, shape } = piece.definition
   const back = depth * BACK_SHARE
   const arm = width * ARM_SHARE
+  switch (shape.kind) {
+    case 'curve': {
+      const lay = curveLayOf(shape.back, piece.entry.flipped)
+      const centre = curveCentre(width, lay)
+      // From the entry face round to the exit face (see chain-geometry's curve faces).
+      const from = lay === 'outside' ? { x: 0, z: -1 } : { x: 0, z: 1 }
+      const to = { x: 1, z: 0 }
+      const inner = width - shape.seatDepthMm
+      const band = shape.seatDepthMm * BACK_SHARE
+      const middle = { x: (from.x + to.x) / Math.SQRT2, z: (from.z + to.z) / Math.SQRT2 }
+      const seatRadius = shape.back === 'outside' ? inner + (shape.seatDepthMm - band) / 2 : shape.back === 'inside' ? inner + band + (shape.seatDepthMm - band) / 2 : inner + shape.seatDepthMm / 2
+      return {
+        body: (
+          <>
+            <path className="mcf-plan-unit" d={ringPath(centre, inner, width, from, to)} />
+            {shape.back === 'outside' ? <path className="mcf-plan-back" d={ringPath(centre, width - band, width, from, to)} /> : null}
+            {shape.back === 'inside' ? <path className="mcf-plan-back" d={ringPath(centre, inner, inner + band, from, to)} /> : null}
+          </>
+        ),
+        numberAt: { x: centre.x + seatRadius * middle.x, z: centre.z + seatRadius * middle.z },
+      }
+    }
+    case 'round-end':
+      return {
+        body: (
+          <path
+            className="mcf-plan-unit"
+            d={`M ${-width / 2} ${-depth / 2} L ${width / 2} ${-depth / 2} A ${width / 2} ${depth} 0 0 1 ${-width / 2} ${-depth / 2} Z`}
+          />
+        ),
+        numberAt: { x: 0, z: 0 },
+      }
+    case 'corner':
+      return {
+        body: (
+          <>
+            <rect className="mcf-plan-unit" x={-width / 2} y={-depth / 2} width={width} height={depth} rx={Math.min(width, depth) * 0.05} />
+            <rect className="mcf-plan-back" x={-width / 2} y={-depth / 2} width={width} height={back} />
+            <rect
+              className="mcf-plan-back"
+              x={shape.backSide === 'left' ? -width / 2 : width / 2 - back}
+              y={-depth / 2}
+              width={back}
+              height={depth}
+            />
+          </>
+        ),
+        numberAt: { x: 0, z: back / 2 },
+      }
+    case 'straight':
+      return {
+        body: (
+          <>
+            <rect className="mcf-plan-unit" x={-width / 2} y={-depth / 2} width={width} height={depth} rx={Math.min(width, depth) * 0.05} />
+            {shape.backless ? null : <rect className="mcf-plan-back" x={-width / 2} y={-depth / 2} width={width} height={back} />}
+            {shape.closedLeft ? (
+              <rect className="mcf-plan-arm" x={-width / 2} y={-depth / 2 + back} width={arm} height={depth - back} />
+            ) : null}
+            {shape.closedRight ? (
+              <rect className="mcf-plan-arm" x={width / 2 - arm} y={-depth / 2 + back} width={arm} height={depth - back} />
+            ) : null}
+          </>
+        ),
+        numberAt: { x: 0, z: shape.backless ? 0 : back / 2 },
+      }
+  }
+}
+
+function PlanUnit({ piece, number, label, fontSize, interactive, selected, onSelect }: PlanUnitProps) {
   const degrees = (-piece.pose.rotationY * 180) / Math.PI
-  // The number sits on the seat, in front of the backrest, and stays upright.
-  const seatCentre = pointOnPiece(piece.pose, { x: 0, z: back / 2 })
+  const { body: outline, numberAt } = planShapeOf(piece)
+  // The number sits on the seat, in front of any backrest, and stays upright.
+  const seatCentre = pointOnPiece(piece.pose, numberAt)
   const select = () => onSelect?.(piece.entry.entryId)
 
   const body = (
     <>
-      <g transform={`translate(${piece.pose.centre.x} ${piece.pose.centre.z}) rotate(${degrees})`}>
-        <rect className="mcf-plan-unit" x={-width / 2} y={-depth / 2} width={width} height={depth} rx={Math.min(width, depth) * 0.05} />
-        <rect className="mcf-plan-back" x={-width / 2} y={-depth / 2} width={width} height={back} />
-        {shape.kind === 'corner' ? (
-          <rect
-            className="mcf-plan-back"
-            x={shape.backSide === 'left' ? -width / 2 : width / 2 - back}
-            y={-depth / 2}
-            width={back}
-            height={depth}
-          />
-        ) : null}
-        {shape.kind === 'straight' && shape.closedLeft ? (
-          <rect className="mcf-plan-arm" x={-width / 2} y={-depth / 2 + back} width={arm} height={depth - back} />
-        ) : null}
-        {shape.kind === 'straight' && shape.closedRight ? (
-          <rect className="mcf-plan-arm" x={width / 2 - arm} y={-depth / 2 + back} width={arm} height={depth - back} />
-        ) : null}
-      </g>
+      <g transform={`translate(${piece.pose.centre.x} ${piece.pose.centre.z}) rotate(${degrees})`}>{outline}</g>
       <text className="mcf-plan-number" x={seatCentre.x} y={seatCentre.z} style={{ fontSize }}>
         {number}
       </text>

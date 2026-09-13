@@ -76,7 +76,9 @@ describe('what can be added where', () => {
   it('refuses a corner that would fold the layout back onto itself', () => {
     const ring = chainOf('corner', 'corner', 'corner', 'corner')
     expect(findChainProblem(ring, DEFINITIONS, LIMITS)).toBeNull()
-    expect(refusalsAt(ring, 'end').corner).toBe('would-overlap')
+    // Four corners meet all the way round: there is no end left to add to at all.
+    expect(refusalsAt(ring, 'end').corner).toBe('layout-is-closed')
+    expect(refusalsAt(chainOf('corner', 'corner', 'corner'), 'end').corner).toBeNull()
     expect(findChainProblem(chainOf('corner', 'corner', 'corner', 'corner', 'corner'), DEFINITIONS, LIMITS)).toBe('would-overlap')
   })
 

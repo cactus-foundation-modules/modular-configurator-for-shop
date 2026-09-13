@@ -4,7 +4,7 @@
 // sentence for the owner, or null. Pure, so the save route and its tests agree.
 import { findChainProblem } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
-import type { SaveConfiguratorBody } from '@/modules/modular-configurator-for-shop/lib/config-schema'
+import type { PieceConfig, SaveConfiguratorBody } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 import { sameOptionName } from '@/modules/modular-configurator-for-shop/lib/piece-catalogue'
 
 export interface OptionForValidation {
@@ -24,8 +24,11 @@ export function validateConfigAgainstOptions(
   const seen = new Set<string>()
   for (const piece of config.pieces) {
     if (!labelBySlug.has(piece.valueSlug)) return `"${piece.valueSlug}" is not one of the ${pieceOption.name} choices`
-    if (seen.has(piece.valueSlug)) return `${labelBySlug.get(piece.valueSlug)} is set up twice`
+    const label = labelBySlug.get(piece.valueSlug) ?? piece.valueSlug
+    if (seen.has(piece.valueSlug)) return `${label} is set up twice`
     seen.add(piece.valueSlug)
+    const sizeProblem = pieceSizeProblem(piece)
+    if (sizeProblem) return `${label} ${sizeProblem}`
   }
   if (body.enabled && config.pieces.length === 0) return 'Set up at least one unit before switching the layout builder on'
 
@@ -49,8 +52,21 @@ export function validateConfigAgainstOptions(
   return null
 }
 
+/**
+ * Sizes a shape cannot have. A curve is a quarter ring, so its footprint is a
+ * square as big as the ring, and its seat has to fit inside that.
+ */
+export function pieceSizeProblem(piece: PieceConfig): string | null {
+  if (piece.shape.kind !== 'curve') return null
+  if (piece.widthMm !== piece.depthMm) return 'is curved, so its width and depth are both the size of the curve and must match'
+  if (piece.shape.seatDepthMm >= piece.widthMm) return 'has a seat deeper than the curve it sits in'
+  return null
+}
+
 const PRESET_PROBLEM_WORDING: Record<NonNullable<ReturnType<typeof findChainProblem>>, string> = {
   'end-is-closed': 'a unit is joined on to an arm',
+  'layout-is-closed': 'it carries on after it has joined up all the way round',
+  'cannot-flip': 'it turns round a unit that only goes one way',
   'piece-closed-on-joining-side': 'a unit is joined on to an arm',
   'neighbours-cannot-join': 'two neighbouring units meet arm to seat',
   'would-overlap': 'the units would sit on top of each other',

@@ -124,13 +124,14 @@ export function LayoutStage(props: LayoutStageProps) {
           entryId: piece.entry.entryId,
           pose: piece.pose,
           footprint: piece.footprint,
-          sourceKey: `${piece.entry.pieceId}|${childProductId ?? 'unchosen'}`,
+          sourceKey: `${piece.entry.pieceId}|${childProductId ?? 'unchosen'}|${piece.entry.flipped ? 'flipped' : 'usual'}`,
           build: () => {
             if (!storefrontPiece) return Promise.reject(new Error(`Unknown unit ${piece.entry.pieceId}`))
             return buildUnitModel({
               parentProductId,
               childProductId,
               piece: storefrontPiece,
+              flipped: piece.entry.flipped === true,
               placeholderColour: placeholderColourRef.current,
             })
           },

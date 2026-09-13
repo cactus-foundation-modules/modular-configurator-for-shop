@@ -128,8 +128,11 @@ export function useLayoutView(
       arrangementText: describeArrangement(labels),
       unitCountText: unitCountLabel(draft.chain.length),
       code: encodeLayout(
-        draft.chain.map((entry) => entry.pieceId),
-        draft.chain.map((entry) => draft.unitChoices[entry.entryId] ?? {}),
+        draft.chain.map((entry) => ({
+          pieceId: entry.pieceId,
+          choices: draft.unitChoices[entry.entryId] ?? {},
+          flipped: entry.flipped === true,
+        })),
         {
           pieceSlugById: new Map(storefront.pieces.map((piece) => [piece.pieceId, piece.valueSlug])),
           otherOptions: otherOptionsOf(payload, storefront.pieceOptionId),
