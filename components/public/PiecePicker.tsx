@@ -15,7 +15,8 @@ interface PiecePickerProps {
   currencySymbol: string
   maxPieces: number
   onPick: (pieceId: string) => void
-  onCancel: () => void
+  /** Absent when there is nothing to cancel back to (an empty layout). */
+  onCancel?: () => void
 }
 
 export function PiecePicker({ heading, candidates, labelFor, priceFor, currencySymbol, maxPieces, onPick, onCancel }: PiecePickerProps) {
@@ -23,9 +24,11 @@ export function PiecePicker({ heading, candidates, labelFor, priceFor, currencyS
     <section className="mcf-picker" aria-label={heading}>
       <div className="mcf-section-head">
         <p className="mcf-section-title">{heading}</p>
-        <button type="button" className="mcf-link-button" onClick={onCancel}>
-          Cancel
-        </button>
+        {onCancel ? (
+          <button type="button" className="mcf-link-button" onClick={onCancel}>
+            Cancel
+          </button>
+        ) : null}
       </div>
       <ul className="mcf-picker-list">
         {candidates.map((candidate) => {

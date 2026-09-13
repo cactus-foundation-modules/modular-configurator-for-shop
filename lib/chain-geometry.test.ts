@@ -3,7 +3,6 @@ import {
   anchorLayout,
   layoutBounds,
   placeChain,
-  poseAtEnd,
   type ChainEntry,
   type PieceDefinition,
   type PlacedPiece,
@@ -90,18 +89,6 @@ describe('turning a corner', () => {
 })
 
 describe('adding before the first unit', () => {
-  it('lands exactly where the whole chain, re-walked and re-anchored, would put it', () => {
-    const definitions = definitionsWith(CORNER_BACK_LEFT)
-    const before = placeChain(chainOf('central', 'corner', 'central'), definitions)
-    const predicted = poseAtEnd(before, 'start', LEFT_END)
-    const walked = anchorLayout(
-      placeChain([{ entryId: 'new', pieceId: 'left' }, ...chainOf('central', 'corner', 'central')], definitions),
-      before,
-    )
-    expect(pieceAt(walked, 0).pose.centre).toEqual(predicted.centre)
-    expect(pieceAt(walked, 0).pose.rotationY).toBeCloseTo(predicted.rotationY)
-  })
-
   it('leaves the units already there exactly where they were', () => {
     const definitions = definitionsWith(CORNER_BACK_LEFT)
     const before = placeChain(chainOf('corner', 'central', 'right'), definitions)
@@ -111,6 +98,20 @@ describe('adding before the first unit', () => {
       before,
     )
     expect(after.slice(1).map((piece) => piece.footprint)).toEqual(before.map((piece) => piece.footprint))
+  })
+})
+
+describe('making room inside an arm unit', () => {
+  it('holds the rest still and lets the moved unit go', () => {
+    const definitions = definitionsWith(CORNER_BACK_LEFT)
+    const before = placeChain(chainOf('left', 'central', 'right'), definitions)
+    // A central seat goes in just before the first unit; the first unit (the arm
+    // end) is the one that moves, so it must not be what everything else is held to.
+    const walked = placeChain([{ entryId: 'e0', pieceId: 'left' }, { entryId: 'new', pieceId: 'central' }, ...chainOf('left', 'central', 'right').slice(1)], definitions)
+    const after = anchorLayout(walked, before, 'e0')
+    expect(pieceAt(after, 2).footprint).toEqual(pieceAt(before, 1).footprint)
+    expect(pieceAt(after, 3).footprint).toEqual(pieceAt(before, 2).footprint)
+    expect(pieceAt(after, 0).footprint.maxX).toBe(pieceAt(before, 1).footprint.minX - 660)
   })
 })
 

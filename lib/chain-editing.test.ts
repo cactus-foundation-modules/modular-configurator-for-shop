@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   addAtEnd,
   candidatesAtEnd,
-  endIsOpen,
   findChainProblem,
   removeEntry,
   replaceEntry,
@@ -44,11 +43,34 @@ describe('what can be added where', () => {
     })
   })
 
-  it('closes an end that finishes on an arm', () => {
-    const placed = placeChain(chainOf('left', 'central', 'right'), DEFINITIONS)
-    expect(endIsOpen(placed, 'start')).toBe(false)
-    expect(endIsOpen(placed, 'end')).toBe(false)
-    expect(refusalsAt(chainOf('left', 'central', 'right'), 'end').central).toBe('end-is-closed')
+  it('makes room inside an arm unit rather than refusing, so a finished sofa can still grow', () => {
+    const sofa = chainOf('left', 'central', 'right')
+    const placed = placeChain(sofa, DEFINITIONS)
+    const atEnd = candidatesAtEnd(placed, 'end', ALL, LIMITS)
+    expect(Object.fromEntries(atEnd.map((c) => [c.definition.pieceId, c.refusal]))).toEqual({
+      left: 'piece-closed-on-joining-side',
+      central: null,
+      right: 'piece-closed-on-joining-side',
+      corner: null,
+    })
+    // The space is drawn where the arm unit moves out to: just past its old spot.
+    const centralSpace = atEnd.find((c) => c.definition.pieceId === 'central')?.footprint
+    const armUnit = placed[2]
+    expect(centralSpace?.minX).toBe((armUnit?.footprint.minX ?? Number.NaN) + 660)
+
+    const grown = addAtEnd(sofa, 'end', { entryId: 'n', pieceId: 'central' }, DEFINITIONS, LIMITS)
+    expect(grown.ok && grown.chain.map((entry) => entry.pieceId)).toEqual(['left', 'central', 'central', 'right'])
+    expect(grown.ok && grown.displacedEntryId).toBe('e2')
+
+    const grownAtStart = addAtEnd(sofa, 'start', { entryId: 'n', pieceId: 'corner' }, DEFINITIONS, LIMITS)
+    expect(grownAtStart.ok && grownAtStart.chain.map((entry) => entry.pieceId)).toEqual(['left', 'corner', 'central', 'right'])
+    expect(grownAtStart.ok && grownAtStart.displacedEntryId).toBe('e0')
+  })
+
+  it('offers a lone arm unit only its open side', () => {
+    const placed = placeChain(chainOf('left'), DEFINITIONS)
+    expect(candidatesAtEnd(placed, 'start', [CENTRAL], LIMITS)[0]?.refusal).toBe('end-is-closed')
+    expect(candidatesAtEnd(placed, 'end', [CENTRAL], LIMITS)[0]?.refusal).toBeNull()
   })
 
   it('refuses a corner that would fold the layout back onto itself', () => {

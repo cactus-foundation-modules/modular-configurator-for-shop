@@ -84,8 +84,8 @@ function initialState(): BuilderState {
 
 function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits: ChainLimits) {
   /** Commits a new draft: re-walks, anchors, pushes the old one onto the undo stack. */
-  function commit(state: BuilderState, draft: LayoutDraft, extra: Partial<BuilderState> = {}): BuilderState {
-    const placed = anchorLayout(placeChain(draft.chain, definitions), state.placed)
+  function commit(state: BuilderState, draft: LayoutDraft, extra: Partial<BuilderState> = {}, movedEntryId: string | null = null): BuilderState {
+    const placed = anchorLayout(placeChain(draft.chain, definitions), state.placed, movedEntryId)
     const stillSelected = draft.chain.some((entry) => entry.entryId === state.selectedEntryId)
     return {
       ...state,
@@ -101,7 +101,7 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
 
   function applyEdit(state: BuilderState, result: EditResult, extra: Partial<BuilderState> = {}): BuilderState {
     if (!result.ok) return { ...state, refusal: result.refusal }
-    return commit(state, { chain: result.chain, unitChoices: state.draft.unitChoices }, extra)
+    return commit(state, { chain: result.chain, unitChoices: state.draft.unitChoices }, extra, result.displacedEntryId)
   }
 
   return function builderReducer(state: BuilderState, action: BuilderAction): BuilderState {

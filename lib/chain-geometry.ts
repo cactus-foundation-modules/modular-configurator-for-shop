@@ -260,48 +260,20 @@ export function placeChain(
 }
 
 /**
- * Where a piece would land if joined at one open end of an already placed
- * chain. Joining before the first piece runs the walk backwards: the new
- * piece's EXIT face is glued onto the first piece's entry face.
- */
-export function poseAtEnd(
-  placed: readonly PlacedPiece[],
-  end: ChainEnd,
-  definition: PieceDefinition,
-): PiecePose {
-  const last = placed[placed.length - 1]
-  const first = placed[0]
-  if (!first || !last) return { centre: { x: 0, z: 0 }, rotationY: 0 }
-  if (end === 'end') {
-    return poseJoinedAfter(transformFace(exitFaceOf(last.definition), last.pose), definition)
-  }
-  const firstEntry = transformFace(entryFaceOf(first.definition), first.pose)
-  const exit = exitFaceOf(definition)
-  const facingBack = { x: -firstEntry.outward.x, z: -firstEntry.outward.z }
-  const rotationY = snapToQuarterTurn(headingOf(facingBack) - headingOf(exit.outward))
-  const rotatedCorner = rotateOnFloor(exit.backCorner, rotationY)
-  return {
-    centre: {
-      x: roundMillimetre(firstEntry.backCorner.x - rotatedCorner.x),
-      z: roundMillimetre(firstEntry.backCorner.z - rotatedCorner.z),
-    },
-    rotationY,
-  }
-}
-
-/**
  * Moves a freshly placed chain so the pieces the shopper already had stay
  * exactly where they were. The anchor is the first piece of the previous
  * layout that is still in the new one; with no survivor the chain is left at
  * the origin. Without this, adding a unit before the first piece would swing
- * the whole layout round under the shopper's eyes.
+ * the whole layout round under the shopper's eyes. A piece the edit deliberately
+ * moved (an arm unit making room inside it) is never the anchor.
  */
 export function anchorLayout(
   placedNow: readonly PlacedPiece[],
   placedBefore: readonly PlacedPiece[],
+  movedEntryId: string | null = null,
 ): PlacedPiece[] {
   const nowByEntryId = new Map(placedNow.map((piece) => [piece.entry.entryId, piece]))
-  const anchorBefore = placedBefore.find((piece) => nowByEntryId.has(piece.entry.entryId))
+  const anchorBefore = placedBefore.find((piece) => piece.entry.entryId !== movedEntryId && nowByEntryId.has(piece.entry.entryId))
   const anchorNow = anchorBefore ? nowByEntryId.get(anchorBefore.entry.entryId) : undefined
   if (!anchorBefore || !anchorNow) return [...placedNow]
   const turn = snapToQuarterTurn(anchorBefore.pose.rotationY - anchorNow.pose.rotationY)

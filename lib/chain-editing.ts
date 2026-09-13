@@ -9,10 +9,10 @@
 import {
   acceptsJoinAfter,
   acceptsJoinBefore,
+  anchorLayout,
   footprintAt,
   footprintsOverlap,
   placeChain,
-  poseAtEnd,
   type ChainEnd,
   type ChainEntry,
   type PieceDefinition,
@@ -36,7 +36,10 @@ export type EditRefusal =
   | 'unknown-entry'
   | 'unknown-piece'
 
-export type EditResult = { ok: true; chain: ChainEntry[] } | { ok: false; refusal: EditRefusal }
+export type EditResult =
+  /** `displacedEntryId`: a unit the edit moved out of the way, which the view should not hold still. */
+  | { ok: true; chain: ChainEntry[]; displacedEntryId: string | null }
+  | { ok: false; refusal: EditRefusal }
 
 /** One option in the "add a unit here" picker. */
 export interface EndCandidate {
@@ -78,18 +81,56 @@ function anyFootprintsOverlap(placed: readonly PlacedPiece[]): boolean {
   )
 }
 
-/** Whether a unit can be added at this end at all, before choosing which. */
-export function endIsOpen(placed: readonly PlacedPiece[], end: ChainEnd): boolean {
-  const first = placed[0]
-  const last = placed[placed.length - 1]
-  if (!first || !last) return end === 'end'
-  return end === 'end' ? acceptsJoinAfter(last.definition) : acceptsJoinBefore(first.definition)
+/**
+ * How a unit added at one end of the layout goes in.
+ *
+ * At an open end it simply joins on. At an end that finishes with an arm it goes
+ * just inside the arm unit instead, and the arm unit moves out to stay at the
+ * end - so a ready-made sofa can still be made longer from either end, the way
+ * a shopper would picture it, without anyone having to take the end off first.
+ */
+export interface EndPlan {
+  /** Where in the chain the new unit is inserted. */
+  insertAt: number
+  /** The arm unit the new one goes inside of, which moves out; null at an open end. */
+  displacedEntryId: string | null
 }
 
+export function endPlan(
+  chain: readonly ChainEntry[],
+  end: ChainEnd,
+  definitions: ReadonlyMap<string, PieceDefinition>,
+): EndPlan | null {
+  const first = chain[0]
+  const last = chain[chain.length - 1]
+  if (!first || !last) return end === 'end' ? { insertAt: 0, displacedEntryId: null } : null
+  const edge = end === 'end' ? last : first
+  const edgeDefinition = definitions.get(edge.pieceId)
+  if (!edgeDefinition) return null
+  const open = end === 'end' ? acceptsJoinAfter(edgeDefinition) : acceptsJoinBefore(edgeDefinition)
+  if (open) return { insertAt: end === 'end' ? chain.length : 0, displacedEntryId: null }
+  // A lone unit with an arm is extended from its open side, which the other end
+  // already offers; offering it here too would be the same space twice.
+  if (chain.length < 2) return null
+  return { insertAt: end === 'end' ? chain.length - 1 : 1, displacedEntryId: edge.entryId }
+}
+
+function insertedAt(chain: readonly ChainEntry[], index: number, entry: ChainEntry): ChainEntry[] {
+  return [...chain.slice(0, index), entry, ...chain.slice(index)]
+}
+
+/** A neighbour it cannot join is, from where the shopper stands, its arm in the way. */
+function refusalForAddition(problem: EditRefusal | null): EditRefusal | null {
+  return problem === 'neighbours-cannot-join' ? 'piece-closed-on-joining-side' : problem
+}
+
+const PROBE_ENTRY_ID = 'mcf-probe'
+
 /**
- * Every piece type offered at one end, each with where it would land and why
- * it is refused if it is. Refused pieces stay in the list so the picker can
- * say why, rather than options silently vanishing.
+ * Every piece type offered at one end, each with where its space is drawn and
+ * why it is refused if it is. Refused pieces stay in the list so the picker can
+ * say why, rather than options silently vanishing. The space is where the new
+ * unit lands at an open end, and where the arm unit moves out to at a closed one.
  */
 export function candidatesAtEnd(
   placed: readonly PlacedPiece[],
@@ -97,30 +138,23 @@ export function candidatesAtEnd(
   definitions: readonly PieceDefinition[],
   limits: ChainLimits,
 ): EndCandidate[] {
-  const open = endIsOpen(placed, end)
+  const chain = placed.map((piece) => piece.entry)
+  const byId = new Map([...placed.map((piece) => piece.definition), ...definitions].map((definition) => [definition.pieceId, definition]))
+  const plan = endPlan(chain, end, byId)
   return definitions.map((definition) => {
-    const pose = poseAtEnd(placed, end, definition)
-    const footprint = footprintAt(definition, pose)
-    return { definition, pose, footprint, refusal: refusalAtEnd(placed, end, definition, footprint, open, limits) }
+    if (!plan) {
+      return { definition, pose: ORIGIN_POSE, footprint: footprintAt(definition, ORIGIN_POSE), refusal: 'end-is-closed' }
+    }
+    const trial = insertedAt(chain, plan.insertAt, { entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId })
+    const refusal = placed.length >= limits.maxPieces ? 'too-many-pieces' : refusalForAddition(findChainProblem(trial, byId, limits))
+    const trialPlaced = anchorLayout(placeChain(trial, byId), placed, plan.displacedEntryId)
+    const marker = trialPlaced.find((piece) => piece.entry.entryId === (plan.displacedEntryId ?? PROBE_ENTRY_ID))
+    const pose = marker?.pose ?? ORIGIN_POSE
+    return { definition, pose, footprint: marker?.footprint ?? footprintAt(definition, pose), refusal }
   })
 }
 
-function refusalAtEnd(
-  placed: readonly PlacedPiece[],
-  end: ChainEnd,
-  definition: PieceDefinition,
-  footprint: FloorRectangle,
-  endOpen: boolean,
-  limits: ChainLimits,
-): EditRefusal | null {
-  if (placed.length >= limits.maxPieces) return 'too-many-pieces'
-  if (!endOpen) return 'end-is-closed'
-  if (placed.length > 0) {
-    const joinsOnOpenSide = end === 'end' ? acceptsJoinBefore(definition) : acceptsJoinAfter(definition)
-    if (!joinsOnOpenSide) return 'piece-closed-on-joining-side'
-  }
-  return placed.some((piece) => footprintsOverlap(piece.footprint, footprint)) ? 'would-overlap' : null
-}
+const ORIGIN_POSE: PiecePose = { centre: { x: 0, z: 0 }, rotationY: 0 }
 
 function checked(
   chain: ChainEntry[],
@@ -128,7 +162,7 @@ function checked(
   limits: ChainLimits,
 ): EditResult {
   const problem = findChainProblem(chain, definitions, limits)
-  return problem ? { ok: false, refusal: problem } : { ok: true, chain }
+  return problem ? { ok: false, refusal: problem } : { ok: true, chain, displacedEntryId: null }
 }
 
 export function addAtEnd(
@@ -138,13 +172,13 @@ export function addAtEnd(
   definitions: ReadonlyMap<string, PieceDefinition>,
   limits: ChainLimits,
 ): EditResult {
-  const definition = definitions.get(entry.pieceId)
-  if (!definition) return { ok: false, refusal: 'unknown-piece' }
-  const placed = placeChain(chain, definitions)
-  const pose = poseAtEnd(placed, end, definition)
-  const refusal = refusalAtEnd(placed, end, definition, footprintAt(definition, pose), endIsOpen(placed, end), limits)
-  if (refusal) return { ok: false, refusal }
-  return checked(end === 'end' ? [...chain, entry] : [entry, ...chain], definitions, limits)
+  if (!definitions.has(entry.pieceId)) return { ok: false, refusal: 'unknown-piece' }
+  const plan = endPlan(chain, end, definitions)
+  if (!plan) return { ok: false, refusal: 'end-is-closed' }
+  if (chain.length >= limits.maxPieces) return { ok: false, refusal: 'too-many-pieces' }
+  const trial = insertedAt(chain, plan.insertAt, entry)
+  const refusal = refusalForAddition(findChainProblem(trial, definitions, limits))
+  return refusal ? { ok: false, refusal } : { ok: true, chain: trial, displacedEntryId: plan.displacedEntryId }
 }
 
 /** Removes one piece; its neighbours close up and join each other. */

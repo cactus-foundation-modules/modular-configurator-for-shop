@@ -51,6 +51,10 @@ interface LayoutWorkspaceProps {
   onChooseLayoutValue: (optionId: string, valueId: string) => void
   /** Starts the layout again, back to the shapes. */
   onReset: () => void
+  /** Empties the layout but stays in the builder, on the first-unit list. */
+  onResetLayout: () => void
+  /** False once the shopper chose to design their own: the shapes are then out of the way. */
+  showShapes: boolean
   /** `deliveryMeta` is the shopper's delivery choice as line meta, or empty for the basket's own. */
   onAddToBasket: (layoutQuantity: number, deliveryMeta: Record<string, string>) => void
 }
@@ -74,6 +78,8 @@ export function LayoutWorkspace({
   statusText,
   onChooseLayoutValue,
   onReset,
+  onResetLayout,
+  showShapes,
   onAddToBasket,
 }: LayoutWorkspaceProps) {
   const [layoutQuantity, setLayoutQuantity] = useState(1)
@@ -121,7 +127,9 @@ export function LayoutWorkspace({
 
   const selectedIndex = draft.chain.findIndex((entry) => entry.entryId === selectedEntryId)
   const selectedEntry = selectedIndex >= 0 ? draft.chain[selectedIndex] : undefined
-  const pickerView = pickerEnd ? view.ends[pickerEnd] : null
+  // An empty layout has only one thing to do next, so its list is simply open.
+  const openEnd = pickerEnd ?? (isEmpty ? 'end' : null)
+  const pickerView = openEnd ? view.ends[openEnd] : null
   const firstProblem = view.price.units.find((unit) => unit.problem !== null)
   const addBlockedBecause = isEmpty
     ? 'Add a unit to start'
@@ -142,7 +150,7 @@ export function LayoutWorkspace({
         </div>
       ) : null}
 
-      {pickerView && pickerEnd ? (
+      {pickerView && openEnd ? (
         <div ref={pickerRef}>
         <PiecePicker
           heading={isEmpty ? 'Choose your first unit' : `Add a unit ${pickerView.besideText}`}
@@ -152,10 +160,10 @@ export function LayoutWorkspace({
           currencySymbol={currencySymbol}
           maxPieces={storefront.maxPieces}
           onPick={(pieceId) => {
-            dispatch({ type: 'add', end: pickerEnd, pieceId })
+            dispatch({ type: 'add', end: openEnd, pieceId })
             onClosePicker()
           }}
-          onCancel={onClosePicker}
+          onCancel={isEmpty ? undefined : onClosePicker}
         />
         </div>
       ) : null}
@@ -169,13 +177,18 @@ export function LayoutWorkspace({
             <button type="button" className="mcf-link-button" disabled={!canUndo} onClick={() => dispatch({ type: 'undo' })}>
               Undo
             </button>
+            {!isEmpty ? (
+              <button type="button" className="mcf-link-button" onClick={onResetLayout}>
+                Reset layout
+              </button>
+            ) : null}
           </div>
         </div>
         <p className="mcf-section-note">
           Tap a dashed space in the picture, or a button below, to add a unit there. Tap a unit to swap it, change its
           fabric or take it out.
         </p>
-        {snapshot.ghosts.length > 0 ? (
+        {snapshot.ghosts.length > 0 && !isEmpty ? (
           <div className="mcf-row">
             {snapshot.ghosts.map((ghost) => (
               <button
@@ -241,7 +254,7 @@ export function LayoutWorkspace({
         ) : null}
       </section>
 
-      {storefront.presets.length > 0 ? (
+      {showShapes && storefront.presets.length > 0 ? (
         <section className="mcf-section" aria-labelledby="mcf-shapes">
           <h3 id="mcf-shapes" className="mcf-section-title">
             Start from a shape

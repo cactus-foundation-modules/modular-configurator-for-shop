@@ -217,6 +217,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         }}
         onDesignOwn={() => {
           setStatusText(null)
+          setPickerEnd(null)
           setDesigningOwn(true)
         }}
       />
@@ -249,6 +250,13 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         setDesigningOwn(false)
         dispatch({ type: 'clear' })
       }}
+      onResetLayout={() => {
+        setPickerEnd(null)
+        setStatusText(null)
+        setDesigningOwn(true)
+        dispatch({ type: 'clear' })
+      }}
+      showShapes={!designingOwn}
       onAddToBasket={addToBasket}
     />
   )

@@ -5,7 +5,7 @@
 // variation each unit is, and what could join at each open end. Pure derivation
 // over the builder's draft and the page's variation payload - no state of its own.
 import { useMemo } from 'react'
-import { candidatesAtEnd, endIsOpen, type EndCandidate } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { candidatesAtEnd, endPlan, type EndCandidate } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import type { ChainEnd, PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { encodeLayout } from '@/modules/modular-configurator-for-shop/lib/layout-code'
 import {
@@ -28,7 +28,6 @@ import type { SvrOptionWithValues, VariantSelectorPayload } from '@/modules/shop
 
 export interface EndView {
   end: ChainEnd
-  open: boolean
   candidates: EndCandidate[]
   /** The first unit that could go here, drawn as the dashed space; null when nothing fits. */
   ghost: EndCandidate | null
@@ -100,13 +99,17 @@ export function useLayoutView(
     const limits = { maxPieces: storefront.maxPieces }
     const definitions = storefront.pieces.map((piece) => piece.definition)
 
+    const definitionsById = new Map(definitions.map((definition) => [definition.pieceId, definition]))
     const endView = (end: ChainEnd): EndView => {
       const candidates = candidatesAtEnd(placed, end, definitions, limits)
       const neighbour = end === 'end' ? draft.chain[draft.chain.length - 1] : draft.chain[0]
-      const besideText = neighbour ? `${end === 'end' ? 'after' : 'before'} ${labelOf(neighbour.pieceId)}` : ''
+      // At an arm end the new unit goes just inside the arm unit, so the words
+      // say where it really goes: before the last unit, after the first.
+      const insideArm = Boolean(endPlan(draft.chain, end, definitionsById)?.displacedEntryId)
+      const side = end === 'end' ? (insideArm ? 'before' : 'after') : insideArm ? 'after' : 'before'
+      const besideText = neighbour ? `${side} ${labelOf(neighbour.pieceId)}` : ''
       return {
         end,
-        open: endIsOpen(placed, end),
         candidates,
         ghost: candidates.find((candidate) => candidate.refusal === null) ?? null,
         besideText,
