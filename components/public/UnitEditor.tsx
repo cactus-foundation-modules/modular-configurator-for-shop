@@ -1,13 +1,16 @@
 'use client'
 
-// The panel for one selected unit: swap it for another type that still fits,
-// give it choices of its own (a contrasting fabric, say), or take it out.
+// The panel for one selected unit, opened in place under its row in the list:
+// swap it for another type that still fits, give it choices of its own (a
+// contrasting fabric, say), or take it out.
+import { useId } from 'react'
+import { SwatchSelect } from '@/modules/modular-configurator-for-shop/components/public/SwatchSelect'
+import { swatchOf } from '@/modules/modular-configurator-for-shop/components/public/swatch-style'
 import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { SvrOptionWithValues } from '@/modules/shop-variations/lib/types'
 import type { OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
 
 interface UnitEditorProps {
-  number: number
   label: string
   swapTo: readonly PieceDefinition[]
   labelFor: (pieceId: string) => string
@@ -21,7 +24,6 @@ interface UnitEditorProps {
 }
 
 export function UnitEditor({
-  number,
   label,
   swapTo,
   labelFor,
@@ -33,17 +35,9 @@ export function UnitEditor({
   onRemove,
   onClose,
 }: UnitEditorProps) {
+  const baseId = useId()
   return (
-    <section className="mcf-unit-editor" aria-label={`Unit ${number}, ${label}`}>
-      <div className="mcf-unit-editor-head">
-        <p className="mcf-section-title">
-          Unit {number}: {label}
-        </p>
-        <button type="button" className="mcf-link-button" onClick={onClose}>
-          Done
-        </button>
-      </div>
-
+    <section className="mcf-unit-editor" aria-label={`${label}: swap, fabric and removal`}>
       {swapTo.length > 0 ? (
         <div className="mcf-section">
           <p className="mcf-section-note">Swap it for</p>
@@ -60,25 +54,25 @@ export function UnitEditor({
       {otherOptions.map((option) => {
         const layoutValue = option.values.find((value) => value.id === layoutChoices[option.id])
         const own = ownChoices[option.id] ?? ''
-        const selectId = `mcf-unit-${number}-${option.id}`
+        const labelId = `${baseId}-${option.id}-label`
         return (
           <div key={option.id} className="mcf-section">
-            <label className="mcf-section-note" htmlFor={selectId}>
+            <span id={labelId} className="mcf-section-note">
               {option.name} for this unit
-            </label>
-            <select
-              id={selectId}
-              className="mcf-select"
+            </span>
+            <SwatchSelect
+              labelId={labelId}
               value={own}
-              onChange={(event) => onChoose(option.id, event.target.value || null)}
-            >
-              <option value="">Same as the layout{layoutValue ? ` (${layoutValue.label})` : ''}</option>
-              {option.values.map((value) => (
-                <option key={value.id} value={value.id}>
-                  {value.label}
-                </option>
-              ))}
-            </select>
+              onChange={(valueId) => onChoose(option.id, valueId || null)}
+              options={[
+                {
+                  value: '',
+                  label: `Same as the layout${layoutValue ? ` (${layoutValue.label})` : ''}`,
+                  swatch: layoutValue ? swatchOf(layoutValue) : null,
+                },
+                ...option.values.map((value) => ({ value: value.id, label: value.label, swatch: swatchOf(value) })),
+              ]}
+            />
           </div>
         )
       })}
@@ -86,6 +80,9 @@ export function UnitEditor({
       <div className="mcf-actions">
         <button type="button" className="mcf-button mcf-button--quiet" onClick={onRemove}>
           Take this unit out
+        </button>
+        <button type="button" className="mcf-link-button" onClick={onClose}>
+          Done
         </button>
       </div>
     </section>

@@ -16,6 +16,7 @@
 import type {
   DirectionalLight,
   Group,
+  Line,
   Mesh,
   Object3D,
   PerspectiveCamera,
@@ -626,6 +627,16 @@ export class LayoutScene {
     this.controls.addEventListener('start', onControlsStart)
     this.removeListeners.push(() => this.controls.removeEventListener('start', onControlsStart))
 
+    // A wheel or pinch zoom moves the camera inside the controls' own event
+    // handler, not in the loop's update() - so by the time the loop asks whether
+    // anything moved, the answer is already "no" and the zoom would sit undrawn
+    // until the next drag. The controls announce every camera change, so draw on that.
+    const onControlsChange = () => {
+      this.needsRender = true
+    }
+    this.controls.addEventListener('change', onControlsChange)
+    this.removeListeners.push(() => this.controls.removeEventListener('change', onControlsChange))
+
     const onPointerDown = (event: PointerEvent) => {
       this.pointerDown = { x: event.clientX, y: event.clientY }
     }
@@ -663,12 +674,23 @@ export class LayoutScene {
     const pointer = new three.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
     const raycaster = new three.Raycaster()
     raycaster.setFromCamera(pointer, this.camera)
-    const ghostHit = raycaster.intersectObjects(this.ghostGroup.children, true)[0]
-    const ghostEnd = ghostHit ? findUserData(ghostHit.object, 'ghostEnd') : null
-    if (ghostEnd === 'start' || ghostEnd === 'end') return { ghostEnd }
+    // Outlines are for looking at, not for hitting. three's default line
+    // threshold is a whole scene unit - a metre here - which made every ghost's
+    // dashed outline catch taps meant for the unit beside it.
+    raycaster.params.Line = { threshold: 0 }
+
     const holders = [...this.units.values()].map((slot) => slot.holder)
-    const unitHit = raycaster.intersectObjects(holders, true)[0]
-    const entryId = unitHit ? findUserData(unitHit.object, 'entryId') : null
+    const hits = raycaster
+      .intersectObjects([...this.ghostGroup.children, ...holders], true)
+      .filter((hit) => !(hit.object as Partial<Line>).isLine)
+    // The "+" badge is drawn over everything, so a tap on it is a tap on it even
+    // where a unit sits behind; otherwise the nearest thing under the pointer wins.
+    const badge = hits.find((hit) => (hit.object as Partial<Sprite>).isSprite)
+    const hit = badge ?? hits[0]
+    if (!hit) return null
+    const ghostEnd = findUserData(hit.object, 'ghostEnd')
+    if (ghostEnd === 'start' || ghostEnd === 'end') return { ghostEnd }
+    const entryId = findUserData(hit.object, 'entryId')
     return typeof entryId === 'string' ? { entryId } : null
   }
 

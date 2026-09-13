@@ -4,6 +4,8 @@
 // values carry them, labelled chips where they do not. Shared by the layout's
 // own choices and a single unit's, so both read the same way.
 import type { SvrOptionWithValues } from '@/modules/shop-variations/lib/types'
+import { SwatchPeek } from '@/modules/modular-configurator-for-shop/components/public/SwatchPeek'
+import { swatchOf, swatchStyle } from '@/modules/modular-configurator-for-shop/components/public/swatch-style'
 
 interface OptionChoicesProps {
   option: SvrOptionWithValues
@@ -13,33 +15,28 @@ interface OptionChoicesProps {
   unavailableReason?: (valueId: string) => string | null
 }
 
-function swatchStyle(swatch: string): React.CSSProperties {
-  // A hex swatch is the product's own colour data, not interface chrome.
-  return swatch.startsWith('#') ? { backgroundColor: swatch } : { backgroundImage: `url("${swatch.replace(/"/g, '%22')}")` }
-}
-
 export function OptionChoices({ option, chosenValueId, onChoose, unavailableReason }: OptionChoicesProps) {
-  const usesSwatches = option.values.some((value) => value.swatchSmall || value.swatch)
+  const usesSwatches = option.values.some((value) => swatchOf(value))
   return (
     <div className={usesSwatches ? 'mcf-swatches' : 'mcf-row'} role="group" aria-label={option.name}>
       {option.values.map((value) => {
         const reason = unavailableReason?.(value.id) ?? null
         const chosen = value.id === chosenValueId
-        const swatch = value.swatchSmall || value.swatch
+        const swatch = swatchOf(value)
         const title = reason ? `${value.label} - ${reason}` : value.label
         return usesSwatches ? (
-          <button
-            key={value.id}
-            type="button"
-            className="mcf-swatch"
-            style={swatch ? swatchStyle(swatch) : undefined}
-            aria-pressed={chosen}
-            disabled={reason !== null && !chosen}
-            title={title}
-            onClick={() => onChoose(value.id)}
-          >
-            <span className="mcf-swatch-label">{title}</span>
-          </button>
+          <SwatchPeek key={value.id} swatch={swatch} label={value.label} reason={reason}>
+            <button
+              type="button"
+              className="mcf-swatch"
+              style={swatch ? swatchStyle(swatch) : undefined}
+              aria-pressed={chosen}
+              disabled={reason !== null && !chosen}
+              onClick={() => onChoose(value.id)}
+            >
+              <span className="mcf-swatch-label">{title}</span>
+            </button>
+          </SwatchPeek>
         ) : (
           <button
             key={value.id}

@@ -256,7 +256,6 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         setDesigningOwn(true)
         dispatch({ type: 'clear' })
       }}
-      showShapes={!designingOwn}
       onAddToBasket={addToBasket}
     />
   )

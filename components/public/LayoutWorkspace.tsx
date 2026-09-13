@@ -1,8 +1,8 @@
 'use client'
 
 // The layout builder's controls, laid out down the product page's purchase
-// column: what to add and why not, the units in order and the selected one,
-// starting shapes, the layout's own options, and the price with the add button
+// column: what to add and why not, the units in order and the selected one, the
+// layout's own options, and the price with the add button
 // last - the same order, and the same look, as the individual tab's price,
 // delivery box and buy row.
 //
@@ -53,8 +53,6 @@ interface LayoutWorkspaceProps {
   onReset: () => void
   /** Empties the layout but stays in the builder, on the first-unit list. */
   onResetLayout: () => void
-  /** False once the shopper chose to design their own: the shapes are then out of the way. */
-  showShapes: boolean
   /** `deliveryMeta` is the shopper's delivery choice as line meta, or empty for the basket's own. */
   onAddToBasket: (layoutQuantity: number, deliveryMeta: Record<string, string>) => void
 }
@@ -79,12 +77,12 @@ export function LayoutWorkspace({
   onChooseLayoutValue,
   onReset,
   onResetLayout,
-  showShapes,
   onAddToBasket,
 }: LayoutWorkspaceProps) {
   const [layoutQuantity, setLayoutQuantity] = useState(1)
   const [deliveryChoice, setDeliveryChoice] = useState<string | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
+  const unitEditorRef = useRef<HTMLDivElement>(null)
 
   const { draft, selectedEntryId, refusal, dispatch, canUndo } = builder
   const pieceById = useMemo(() => pieceLookup(storefront.pieces), [storefront.pieces])
@@ -101,6 +99,10 @@ export function LayoutWorkspace({
   useEffect(() => {
     if (pickerEnd) pickerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [pickerEnd])
+  // Likewise a unit tapped in the gallery: its panel is down here.
+  useEffect(() => {
+    if (selectedEntryId) unitEditorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selectedEntryId])
 
   const priceOfPieceAlone = (pieceId: string): number | null =>
     priceLayout(payload, storefront.pieceOptionId, [{ entryId: 'probe', pieceId }], layoutChoices, {}).units[0]?.variant?.price ?? null
@@ -125,8 +127,6 @@ export function LayoutWorkspace({
     [delivery],
   )
 
-  const selectedIndex = draft.chain.findIndex((entry) => entry.entryId === selectedEntryId)
-  const selectedEntry = selectedIndex >= 0 ? draft.chain[selectedIndex] : undefined
   // An empty layout has only one thing to do next, so its list is simply open.
   const openEnd = pickerEnd ?? (isEmpty ? 'end' : null)
   const pickerView = openEnd ? view.ends[openEnd] : null
@@ -184,10 +184,6 @@ export function LayoutWorkspace({
             ) : null}
           </div>
         </div>
-        <p className="mcf-section-note">
-          Tap a dashed space in the picture, or a button below, to add a unit there. Tap a unit to swap it, change its
-          fabric or take it out.
-        </p>
         {snapshot.ghosts.length > 0 && !isEmpty ? (
           <div className="mcf-row">
             {snapshot.ghosts.map((ghost) => (
@@ -204,22 +200,6 @@ export function LayoutWorkspace({
           </div>
         ) : null}
 
-        {selectedEntry ? (
-          <UnitEditor
-            number={selectedIndex + 1}
-            label={labelFor(selectedEntry.pieceId)}
-            swapTo={swapOptions(draft.chain, selectedEntry.entryId, definitions, { maxPieces: storefront.maxPieces })}
-            labelFor={labelFor}
-            otherOptions={otherOptions}
-            layoutChoices={layoutChoices}
-            ownChoices={draft.unitChoices[selectedEntry.entryId] ?? {}}
-            onSwap={(pieceId) => dispatch({ type: 'swap', entryId: selectedEntry.entryId, pieceId })}
-            onChoose={(optionId, valueId) => dispatch({ type: 'set-unit-choice', entryId: selectedEntry.entryId, optionId, valueId })}
-            onRemove={() => dispatch({ type: 'remove', entryId: selectedEntry.entryId })}
-            onClose={() => onSelectUnit(null)}
-          />
-        ) : null}
-
         {!isEmpty ? (
           <ol className="mcf-units">
             {view.price.units.map((unit, index) => {
@@ -228,16 +208,19 @@ export function LayoutWorkspace({
                 const value = option.values.find((candidate) => candidate.id === own[option.id])
                 return value ? [value.label] : []
               })
+              const selected = unit.entry.entryId === selectedEntryId
+              const panelId = `mcf-unit-panel-${unit.entry.entryId}`
               return (
-                <li key={unit.entry.entryId} className="mcf-unit" data-selected={unit.entry.entryId === selectedEntryId}>
+                <li key={unit.entry.entryId} className="mcf-unit" data-selected={selected}>
                   <span className="mcf-unit-number" aria-hidden="true">
                     {index + 1}
                   </span>
                   <button
                     type="button"
                     className="mcf-unit-select"
-                    aria-pressed={unit.entry.entryId === selectedEntryId}
-                    onClick={() => onSelectUnit(unit.entry.entryId)}
+                    aria-expanded={selected}
+                    aria-controls={selected ? panelId : undefined}
+                    onClick={() => onSelectUnit(selected ? null : unit.entry.entryId)}
                   >
                     <span className="mcf-unit-name">{view.labels[index]}</span>
                     {unit.problem ? (
@@ -247,36 +230,29 @@ export function LayoutWorkspace({
                     ) : null}
                   </button>
                   <span className="mcf-unit-price">{unit.variant ? money(unit.variant.price) : ''}</span>
+                  {selected ? (
+                    // The selected unit opens in place, in the list, wherever it was chosen from.
+                    <div id={panelId} className="mcf-unit-body" ref={unitEditorRef}>
+                      <UnitEditor
+                        label={view.labels[index] ?? labelFor(unit.entry.pieceId)}
+                        swapTo={swapOptions(draft.chain, unit.entry.entryId, definitions, { maxPieces: storefront.maxPieces })}
+                        labelFor={labelFor}
+                        otherOptions={otherOptions}
+                        layoutChoices={layoutChoices}
+                        ownChoices={own}
+                        onSwap={(pieceId) => dispatch({ type: 'swap', entryId: unit.entry.entryId, pieceId })}
+                        onChoose={(optionId, valueId) => dispatch({ type: 'set-unit-choice', entryId: unit.entry.entryId, optionId, valueId })}
+                        onRemove={() => dispatch({ type: 'remove', entryId: unit.entry.entryId })}
+                        onClose={() => onSelectUnit(null)}
+                      />
+                    </div>
+                  ) : null}
                 </li>
               )
             })}
           </ol>
         ) : null}
       </section>
-
-      {showShapes && storefront.presets.length > 0 ? (
-        <section className="mcf-section" aria-labelledby="mcf-shapes">
-          <h3 id="mcf-shapes" className="mcf-section-title">
-            Start from a shape
-          </h3>
-          {!isEmpty ? <p className="mcf-section-note">Picking one replaces your layout - Undo brings it back.</p> : null}
-          <div className="mcf-row">
-            {storefront.presets.map((preset) => (
-              <button
-                key={preset.name}
-                type="button"
-                className="mcf-chip"
-                onClick={() => {
-                  onClosePicker()
-                  dispatch({ type: 'start-from', pieceIds: preset.pieceIds, byShopper: true })
-                }}
-              >
-                {preset.name}
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       {otherOptions.map((option) => {
         const chosen = option.values.find((value) => value.id === layoutChoices[option.id])
@@ -312,10 +288,6 @@ export function LayoutWorkspace({
             Reset options
           </button>
         </div>
-        <p className={addBlockedBecause ? 'mcf-status mcf-status--problem' : 'mcf-status'}>
-          {addBlockedBecause ?? `${view.shapeLabel} · ${view.countsText}`}
-        </p>
-
         {delivery ? (
           <LayoutDeliveryPicker
             delivery={delivery}
@@ -325,6 +297,30 @@ export function LayoutWorkspace({
             onChange={setDeliveryChoice}
           />
         ) : null}
+
+        {addBlockedBecause ? (
+          <p className="mcf-status mcf-status--problem">{addBlockedBecause}</p>
+        ) : (
+          // Same green "ready" box as the individual items tab, in the same place above the buy row.
+          <div className="mcf-ready" role="status">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+            <span>
+              Ready to add: {view.shapeLabel} · {view.countsText}
+            </span>
+          </div>
+        )}
 
         <div className="mcf-buy-row">
           <div className="mcf-qty" role="group" aria-label="How many of this layout">

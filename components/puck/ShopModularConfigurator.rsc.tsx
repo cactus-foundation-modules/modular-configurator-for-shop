@@ -5,6 +5,7 @@
 // product gets the individual slot's blocks exactly as if this block were not
 // there - no tab bar, no builder, no extra markup - so the block can sit in the
 // shared product layout.
+import { getResponsiveBreakpoints } from '@/lib/puck/responsiveValue'
 import { currentProductPageSearchParams } from '@/modules/shop/lib/product-page-params'
 import { currentProductSlug } from '@/modules/shop-variations/lib/variation-bootstrap'
 import { loadConfiguratorBlockData } from '@/modules/modular-configurator-for-shop/lib/storefront-payload'
@@ -31,6 +32,7 @@ async function ShopModularConfiguratorRsc(props: ShopModularConfiguratorProps) {
       buildLabel={labelOr(props.buildLabel, DEFAULT_BUILD_LABEL)}
       individualLabel={labelOr(props.individualLabel, DEFAULT_INDIVIDUAL_LABEL)}
       openingTab={openingTabFor(currentProductPageSearchParams())}
+      mobileBreakpoint={getResponsiveBreakpoints().mobile}
       build={<LayoutBuilder storefront={data.payload} bootstrap={data.bootstrap} intro={props.intro?.trim() ?? DEFAULT_INTRO} />}
       individual={individual}
     />

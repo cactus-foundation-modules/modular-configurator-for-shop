@@ -12,6 +12,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { ProductTab } from '@/modules/modular-configurator-for-shop/lib/opening-tab'
 import { CONFIGURATOR_CSS } from '@/modules/modular-configurator-for-shop/components/public/configurator-css'
+import { peekMobileCss } from '@/modules/modular-configurator-for-shop/components/public/SwatchPeek'
 import { publishActiveTab } from '@/modules/modular-configurator-for-shop/components/public/layout-stage-store'
 
 interface ConfiguratorTabsProps {
@@ -20,6 +21,11 @@ interface ConfiguratorTabsProps {
   buildLabel: string
   individualLabel: string
   openingTab: ProductTab
+  /**
+   * The site's mobile breakpoint in px, from the server: a client island cannot read
+   * core's responsive settings. Left out by the editor, whose sample has no swatches.
+   */
+  mobileBreakpoint?: number
   build: ReactNode
   individual: ReactNode
 }
@@ -27,7 +33,7 @@ interface ConfiguratorTabsProps {
 // Left to right: the units one at a time first, then the layout builder.
 const ORDER: readonly ProductTab[] = ['individual', 'build']
 
-export function ConfiguratorTabs({ slug, buildLabel, individualLabel, openingTab, build, individual }: ConfiguratorTabsProps) {
+export function ConfiguratorTabs({ slug, buildLabel, individualLabel, openingTab, mobileBreakpoint, build, individual }: ConfiguratorTabsProps) {
   const [active, setActive] = useState<ProductTab>(openingTab)
   // The gallery shows the layout only while its tab is the open one.
   useEffect(() => {
@@ -53,7 +59,7 @@ export function ConfiguratorTabs({ slug, buildLabel, individualLabel, openingTab
 
   return (
     <div className="mcf-tabs-root">
-      <style dangerouslySetInnerHTML={{ __html: CONFIGURATOR_CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: mobileBreakpoint === undefined ? CONFIGURATOR_CSS : `${CONFIGURATOR_CSS}\n${peekMobileCss(mobileBreakpoint)}` }} />
       <div className="mcf-tabs" role="tablist" aria-label="How to buy" data-cactus-unstyled="">
         {ORDER.map((tab) => (
           <button
