@@ -1,0 +1,60 @@
+{
+  "name": "modular-configurator-for-shop",
+  "version": "0.1.0",
+  "tablePrefix": "mcf_",
+  "description": "Let shoppers build a layout from a modular product's units in 3D - sofas, bench seating, anything that joins end to end and turns corners - and buy the whole arrangement in one go",
+  "requiresCoreVersion": "0.5.1601",
+  "requiresModules": [
+    {
+      "name": "shop",
+      "minVersion": "0.1.429"
+    },
+    {
+      "name": "shop-variations",
+      "minVersion": "0.1.187"
+    },
+    {
+      "name": "product-3d-views-for-shop",
+      "minVersion": "0.1.105"
+    }
+  ],
+  "permissions": [],
+  "extensionPoints": [
+    {
+      "point": "shop.product-editor-sections",
+      "id": "modular-configurator-inline",
+      "label": "Layout builder",
+      "order": 62,
+      "permission": "shop.products",
+      "import": "./components/admin/ModularConfiguratorSection",
+      "component": "ModularConfiguratorSection"
+    },
+    {
+      "point": "shop.cart-line-resolver",
+      "id": "modular-configurator",
+      "import": "./lib/line-resolver",
+      "component": "resolveLayoutLineMeta"
+    },
+    {
+      "point": "shop.cart-line-resolver-prefetch",
+      "id": "modular-configurator",
+      "import": "./lib/line-resolver",
+      "component": "prefetchLayoutLines"
+    }
+  ],
+  "puckBlocks": [
+    {
+      "type": "ShopModularConfigurator",
+      "import": "./components/puck/ShopModularConfigurator",
+      "component": "shopModularConfiguratorPuckComponent",
+      "rscComponent": "shopModularConfiguratorPuckRscComponent",
+      "rscImport": "./components/puck/ShopModularConfigurator.rsc",
+      "layoutTypes": [
+        "shopProductDetail"
+      ]
+    }
+  ],
+  "teardown": [
+    "mcf_product_configs"
+  ]
+}

@@ -1,0 +1,101 @@
+import { describe, expect, it } from 'vitest'
+import { parseLengthToMm } from '@/modules/modular-configurator-for-shop/lib/length-parse'
+import { choiceFromShape, guessShapeFromLabel, SHAPE_CHOICES, shapeFromChoice } from '@/modules/modular-configurator-for-shop/lib/shape-choice'
+import { validateConfigAgainstOptions } from '@/modules/modular-configurator-for-shop/lib/config-validation'
+import { parseStoredConfig, type ConfiguratorConfig } from '@/modules/modular-configurator-for-shop/lib/config-schema'
+import { representativeChildFor, resolvePieceCatalogue } from '@/modules/modular-configurator-for-shop/lib/piece-catalogue'
+import { SEATING_PAYLOAD } from '@/modules/modular-configurator-for-shop/lib/test-fixtures'
+
+const UNIT_OPTION = {
+  name: 'Unit',
+  values: [
+    { slug: 'left-unit', label: 'Left Unit' },
+    { slug: 'central-unit', label: 'Central Unit' },
+    { slug: 'right-unit', label: 'Right Unit' },
+    { slug: 'corner-unit', label: 'Corner Unit' },
+  ],
+}
+
+const CONFIG: ConfiguratorConfig = {
+  pieceOptionName: 'Unit',
+  maxPieces: 12,
+  pieces: [
+    { valueSlug: 'left-unit', shape: { kind: 'straight', closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760, modelTurnDegrees: 0 },
+    { valueSlug: 'central-unit', shape: { kind: 'straight', closedLeft: false, closedRight: false }, widthMm: 660, depthMm: 760, modelTurnDegrees: 0 },
+    { valueSlug: 'right-unit', shape: { kind: 'straight', closedLeft: false, closedRight: true }, widthMm: 790, depthMm: 760, modelTurnDegrees: 0 },
+    { valueSlug: 'corner-unit', shape: { kind: 'corner', backSide: 'left' }, widthMm: 760, depthMm: 760, modelTurnDegrees: 0 },
+  ],
+  presets: [{ name: 'Corner sofa', valueSlugs: ['left-unit', 'corner-unit', 'right-unit'] }],
+}
+
+describe('reading sizes from a specification', () => {
+  it('reads written lengths with their units and refuses to guess a bare number', () => {
+    expect(['79cm', '790 mm', '0.79m', '76,5 cm'].map(parseLengthToMm)).toEqual([790, 790, 790, 765])
+    expect(['79', 'about 80cm', '', '0cm'].map(parseLengthToMm)).toEqual([null, null, null, null])
+  })
+})
+
+describe('the set-up screen’s unit shapes', () => {
+  it('round-trips every choice through its stored shape', () => {
+    for (const { value } of SHAPE_CHOICES) expect(choiceFromShape(shapeFromChoice(value))).toBe(value)
+  })
+
+  it('guesses from the name, treating any corner as a corner', () => {
+    expect(['Left Unit', 'Right Unit', 'Central Unit', 'Left Corner'].map(guessShapeFromLabel)).toEqual([
+      'left-end',
+      'right-end',
+      'middle',
+      'corner-back-left',
+    ])
+  })
+})
+
+describe('checking a set-up before it is saved', () => {
+  it('accepts a set-up that matches the product', () => {
+    expect(validateConfigAgainstOptions({ enabled: true, config: CONFIG }, [UNIT_OPTION])).toBeNull()
+  })
+
+  it('says plainly what does not match', () => {
+    expect(validateConfigAgainstOptions({ enabled: true, config: { ...CONFIG, pieceOptionName: 'Size' } }, [UNIT_OPTION])).toBe(
+      'This product has no option called "Size"',
+    )
+    expect(validateConfigAgainstOptions({ enabled: true, config: { ...CONFIG, pieces: [], presets: [] } }, [UNIT_OPTION])).toBe(
+      'Set up at least one unit before switching the layout builder on',
+    )
+    expect(
+      validateConfigAgainstOptions(
+        { enabled: true, config: { ...CONFIG, presets: [{ name: 'Backwards', valueSlugs: ['right-unit', 'left-unit'] }] } },
+        [UNIT_OPTION],
+      ),
+    ).toBe('"Backwards" cannot be built: two neighbouring units meet arm to seat')
+  })
+
+  it('reads a damaged stored row as not set up rather than breaking the page', () => {
+    expect(parseStoredConfig({ pieceOptionName: 'Unit', pieces: 'nonsense' }).pieces).toEqual([])
+    expect(parseStoredConfig(CONFIG)).toEqual(CONFIG)
+  })
+})
+
+describe('joining a set-up to the live options', () => {
+  it('finds the unit option by name, loosely, and a buyable variation for each unit', () => {
+    const catalogue = resolvePieceCatalogue(SEATING_PAYLOAD, { ...CONFIG, pieceOptionName: ' unit ' })
+    expect(catalogue?.pieces.map((piece) => [piece.valueId, piece.label])).toEqual([
+      ['v-left', 'Left Unit'],
+      ['v-central', 'Central Unit'],
+      ['v-right', 'Right Unit'],
+      ['v-corner', 'Corner Unit'],
+    ])
+    expect(representativeChildFor(SEATING_PAYLOAD, 'v-corner')).toBe('child-corner-unit-rivet-olive-black')
+  })
+
+  it('drops units whose value has gone', () => {
+    const catalogue = resolvePieceCatalogue(SEATING_PAYLOAD, {
+      ...CONFIG,
+      pieces: [
+        ...CONFIG.pieces,
+        { valueSlug: 'withdrawn-unit', shape: { kind: 'straight', closedLeft: false, closedRight: false }, widthMm: 660, depthMm: 760, modelTurnDegrees: 0 },
+      ],
+    })
+    expect(catalogue?.pieces).toHaveLength(4)
+  })
+})
