@@ -1,7 +1,7 @@
 // The storefront half of the "Build a layout / Shop individual items" block.
 //
 // A product with the layout builder switched on gets both tabs, opening on the
-// builder unless the address names a single unit (an advert's link). Every other
+// individual items unless the address is a layout link. Every other
 // product gets the individual slot's blocks exactly as if this block were not
 // there - no tab bar, no builder, no extra markup - so the block can sit in the
 // shared product layout.
@@ -27,9 +27,10 @@ async function ShopModularConfiguratorRsc(props: ShopModularConfiguratorProps) {
   if (!data) return <>{individual}</>
   return (
     <ConfiguratorTabs
+      slug={data.payload.slug}
       buildLabel={labelOr(props.buildLabel, DEFAULT_BUILD_LABEL)}
       individualLabel={labelOr(props.individualLabel, DEFAULT_INDIVIDUAL_LABEL)}
-      openingTab={openingTabFor(currentProductPageSearchParams(), data.payload.pieceOptionName)}
+      openingTab={openingTabFor(currentProductPageSearchParams())}
       build={<LayoutBuilder storefront={data.payload} bootstrap={data.bootstrap} intro={props.intro?.trim() ?? DEFAULT_INTRO} />}
       individual={individual}
     />

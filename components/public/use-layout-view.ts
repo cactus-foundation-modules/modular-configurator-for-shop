@@ -20,6 +20,7 @@ import {
   type LayoutFootprint,
 } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
 import { priceLayout, type LayoutPrice } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
+import type { PlanGhost } from '@/modules/modular-configurator-for-shop/components/public/LayoutPlan'
 import type { ConfiguratorStorefrontPayload, StorefrontPiece } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import type { LayoutDraft } from '@/modules/modular-configurator-for-shop/components/public/use-layout-builder'
 import type { OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
@@ -135,4 +136,17 @@ export function useLayoutView(
       ends: { start: endView('start'), end: endView('end') },
     }
   }, [storefront, payload, draft, placed, layoutChoices])
+}
+
+/**
+ * The dashed spaces a unit can go in, each labelled for a screen reader. An empty
+ * layout offers one, in the middle; otherwise each open end offers its own.
+ */
+export function joinableSpaces(view: LayoutView, isEmpty: boolean): PlanGhost[] {
+  return (['start', 'end'] as const).flatMap((end) => {
+    const endView = view.ends[end]
+    if (!endView.ghost || (end === 'start' && isEmpty)) return []
+    const label = isEmpty ? 'Add your first unit' : `Add a unit ${endView.besideText}`
+    return [{ end, footprint: endView.ghost.footprint, label }]
+  })
 }

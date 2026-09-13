@@ -61,6 +61,7 @@ export function labelOr(value: string | undefined, fallback: string): string {
 export function ShopModularConfiguratorEditor(props: ShopModularConfiguratorProps) {
   return (
     <ConfiguratorTabs
+      slug="editor-preview"
       buildLabel={labelOr(props.buildLabel, DEFAULT_BUILD_LABEL)}
       individualLabel={labelOr(props.individualLabel, DEFAULT_INDIVIDUAL_LABEL)}
       openingTab="individual"

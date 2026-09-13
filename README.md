@@ -61,16 +61,22 @@ so they cannot disagree.
 
 ## What the shopper gets
 
-- **Two tabs under the short description**: "Build a layout" and "Shop individual items"
-  (both labels editable on the block). The page opens on the builder, unless its address
-  names a single unit - an advert's or a shared variation's link - when it opens on the
-  individual items, at the price that was clicked. A layout link always opens the builder.
+- **Two tabs under the short description**: "Shop individual items", then "Build a layout"
+  (both labels editable on the block). The page opens on the individual items; only a
+  layout link opens the builder.
 - **In "Build a layout"**, the ready-made shapes drawn to scale and priced in the options
-  chosen on the page, and "Design your own". Choosing one starts the builder in place: the
-  view (3D, or the plan from above, with overall sizes on or off), what can be added where
+  chosen on the page, and "Design your own". Choosing one starts the builder. **The layout
+  view takes over the product gallery's main picture** - 3D, or the plan from above, with
+  overall sizes on or off - with a "Your layout" thumbnail leading the strip and the
+  photographs still underneath it; clicking a photo shows the photo, and any change to the
+  layout brings the view back. Switching to "Shop individual items" hands the gallery back.
+  (On a page with no gallery, the view is drawn in the tab instead.) The tab holds what can be added where
   and why not, the units in order, a panel for the selected unit (swap it, give it its own
-  fabric, take it out), starting shapes, the layout's own options, undo, and the total with
-  an "Add layout to basket" button. The 3D view only loads once a layout is started. The
+  fabric, take it out), starting shapes, the layout's own options, undo, then the price
+  (styled like the individual tab's, with "Reset options" beside it to start again), the
+  delivery choice in the basket's own box and chips - services every unit can have, dated
+  by the unit arriving last, priced per item with the layout's total - and "Add layout to
+  basket". The 3D view only loads once a layout is started. The
   plan does everything the 3D view does, by keyboard.
 - **Both tabs share one set of choices**: a fabric picked in either is picked in the other.
 - **A link that reopens the layout**: `?modular-layout=left-unit.central-unit~upholstery-colour:rivet-olive.corner-unit`.
@@ -105,6 +111,7 @@ listing, shape, unit and line counts, arrangement and link code, all size-capped
 | Point | Entry |
 |---|---|
 | `shop.product-editor-sections` | `components/admin/ModularConfiguratorSection` - the Layout builder panel |
+| `shop.gallery-media` | `lib/gallery-provider#modularLayoutGalleryProvider` - the layout view on the gallery stage |
 | `shop.cart-line-resolver` | `lib/line-resolver#resolveLayoutLineMeta` |
 | `shop.cart-line-resolver-prefetch` | `lib/line-resolver#prefetchLayoutLines` |
 

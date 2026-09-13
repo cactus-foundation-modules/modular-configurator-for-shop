@@ -17,10 +17,13 @@ export const CONFIGURATOR_CSS = `
 .mcf-start{display:grid;gap:.75rem;color:var(--color-text)}
 .mcf-workspace{display:grid;gap:1rem;color:var(--color-text)}
 .mcf-stage{position:relative;width:100%;aspect-ratio:4/3;max-height:34rem;border:1px solid var(--color-border);border-radius:var(--radius-lg,12px);background:var(--color-bg-subtle);overflow:hidden}
+.mcf-stage--fill{position:absolute;inset:0;aspect-ratio:auto;max-height:none;border:0;border-radius:0}
+.mcf-stage--fill .mcf-stage-tools{justify-content:flex-end}
+.mcf-thumb-plan{display:block;width:100%;height:100%;padding:4px;box-sizing:border-box;background:var(--color-bg-subtle)}
 .mcf-stage-view{position:absolute;inset:0}
 .mcf-stage-plan{display:grid;place-items:center;padding:3.25rem .75rem 2.75rem}
 .mcf-plan{display:block;width:100%;height:100%}
-.mcf-ws-foot{display:grid;gap:.625rem;padding-top:1rem;border-top:1px solid var(--color-border)}
+.mcf-ws-foot{display:grid;gap:.875rem;padding-top:1rem;border-top:1px solid var(--color-border)}
 .mcf-card-intro{margin:0;color:var(--color-text-muted);font-size:.875rem;line-height:1.45}
 .mcf-presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,8.5rem),1fr));gap:.5rem}
 .mcf-preset{display:grid;gap:.375rem;align-content:start;padding:.625rem;border:1px solid var(--color-border);border-radius:var(--radius-md,8px);background:var(--color-bg);color:var(--color-text);text-align:left;cursor:pointer;font:inherit}
@@ -32,10 +35,32 @@ export const CONFIGURATOR_CSS = `
 .mcf-preset--own{place-content:center;justify-items:center;min-height:7.25rem;border-style:dashed;text-align:center}
 .mcf-plus{display:grid;place-items:center;width:2rem;height:2rem;border-radius:50%;background:var(--color-primary-subtle);color:var(--color-primary);font-size:1.25rem;line-height:1}
 .mcf-summary-lines{display:grid;gap:.2rem;min-width:0}
-.mcf-price{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .5rem;font-variant-numeric:tabular-nums}
-.mcf-price-total{font-family:var(--font-heading,inherit);font-size:1.5rem;font-weight:700;color:var(--color-text)}
-.mcf-price-note{color:var(--color-text-muted);font-size:.8125rem}
-.mcf-price-was{color:var(--color-text-muted);font-size:.8125rem;text-decoration:line-through}
+.mcf-price-block{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.mcf-price-now{font-family:var(--display-family,Georgia,serif);font-weight:600;font-size:var(--spd-price-size,34px);color:var(--color-primary)}
+.mcf-price-was{font-size:15px;color:var(--color-text-muted);text-decoration:line-through}
+.mcf-price-rrp,.mcf-price-note{font-size:13px;color:var(--color-text-muted)}
+.mcf-reset{margin-left:2.5rem;padding:0;border:0;background:none;color:var(--color-text-muted);font:inherit;font-size:.8125rem;font-weight:400;white-space:nowrap;text-decoration:underline;cursor:pointer}
+.mcf-reset:hover{color:var(--color-text)}
+.mcf-delivery{display:grid;gap:.375rem}
+.mcf-delivery .scl-hints{gap:0.3375rem;margin-top:0.45rem}
+.mcf-delivery .scl-hints-t{font-size:0.7313rem}
+.mcf-delivery .scl-hint{font-size:0.7313rem;padding:0.225rem 0.5625rem}
+.mcf-delivery .scl-hint-fee{margin-left:0.3938rem}
+.mcf-delivery-total{margin:0;font-size:.8125rem;color:var(--color-text-muted);font-variant-numeric:tabular-nums}
+.mcf-delivery-total strong{color:var(--color-text);font-weight:600}
+.mcf-buy-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;container-type:inline-size}
+.mcf-qty{display:inline-flex;align-items:center;height:52px;border:1px solid var(--color-border);border-radius:9999px;overflow:hidden;background:var(--color-surface)}
+.mcf-qty button{width:46px;height:52px;border:0;background:transparent;color:var(--color-primary);font:inherit;font-size:20px;font-weight:600;cursor:pointer}
+.mcf-qty button:hover:not(:disabled){background:var(--color-bg-subtle)}
+.mcf-qty button:disabled{color:var(--color-border);cursor:not-allowed}
+.mcf-qty-value{width:52px;text-align:center;font-weight:600;font-size:16px;color:var(--color-text);font-variant-numeric:tabular-nums}
+.mcf-add{flex:1;min-width:200px;height:52px;border:0;border-radius:9999px;background:var(--btn-bg,var(--color-primary));color:var(--btn-text-color,var(--color-on-primary));font:inherit;font-weight:600;font-size:16px;cursor:pointer}
+.mcf-add:hover:not(:disabled){background:var(--btn-hover-bg,var(--color-primary-hover,var(--color-primary)));color:var(--btn-hover-text,var(--btn-text-color,var(--color-on-primary)))}
+.mcf-add:active:not(:disabled){transform:scale(.99)}
+.mcf-add:disabled{opacity:.55;cursor:not-allowed}
+.mcf-add:focus-visible,.mcf-qty button:focus-visible,.mcf-reset:focus-visible{outline:2px solid var(--color-border-focus,var(--color-primary));outline-offset:2px}
+@media (pointer:coarse){.mcf-delivery .scl-hint{padding:0.45rem 0.7875rem}}
+@container (max-width:359.98px){.mcf-qty{display:flex;width:100%}.mcf-qty-value{flex:1;width:auto}}
 .mcf-actions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
 .mcf-button{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;min-height:2.75rem;padding:.55rem 1rem;border:1px solid var(--color-primary);border-radius:var(--radius-md,8px);background:var(--color-primary);color:var(--color-on-primary);font:inherit;font-weight:600;cursor:pointer}
 .mcf-button:hover{background:var(--color-primary-hover,var(--color-primary));border-color:var(--color-primary-hover,var(--color-primary))}
@@ -106,9 +131,6 @@ export const CONFIGURATOR_CSS = `
 .mcf-picker-option:disabled{cursor:not-allowed;color:var(--color-text-muted)}
 .mcf-picker-reason{grid-column:1/-1;font-size:.75rem;color:var(--color-text-muted)}
 .mcf-notice{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;padding:.5rem .75rem;border:1px solid var(--color-warning-border,var(--color-border));border-radius:var(--radius-md,8px);background:var(--color-warning-bg,var(--color-bg-subtle));color:var(--color-text);font-size:.8125rem}
-.mcf-stepper{display:inline-flex;align-items:center;border:1px solid var(--color-border);border-radius:var(--radius-md,8px)}
-.mcf-stepper .mcf-icon-button{border:0}
-.mcf-stepper-value{min-width:2rem;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
 
 @media (max-width:640px){
   .mcf-stage{aspect-ratio:1/1}

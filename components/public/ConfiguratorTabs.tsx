@@ -1,7 +1,7 @@
 'use client'
 
-// The product page's two ways to buy a modular product: build a layout, or shop
-// the units one at a time. Two tabs over two panels.
+// The product page's two ways to buy a modular product: shop the units one at a
+// time, or build a layout. Two tabs over two panels.
 //
 // Both panels stay in the page. The individual panel holds the page's ordinary
 // option, price and basket blocks, whose islands have to hydrate and keep in step
@@ -9,11 +9,14 @@
 // reading the page still finds the single-unit price in it. Only the tab bar and
 // the builder panel opt out of the site's button styling: the individual panel is
 // the shop's own blocks and must keep the shop's own look.
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { ProductTab } from '@/modules/modular-configurator-for-shop/lib/opening-tab'
 import { CONFIGURATOR_CSS } from '@/modules/modular-configurator-for-shop/components/public/configurator-css'
+import { publishActiveTab } from '@/modules/modular-configurator-for-shop/components/public/layout-stage-store'
 
 interface ConfiguratorTabsProps {
+  /** The product's slug: which tab is open is shared with the gallery by it. */
+  slug: string
   buildLabel: string
   individualLabel: string
   openingTab: ProductTab
@@ -21,10 +24,15 @@ interface ConfiguratorTabsProps {
   individual: ReactNode
 }
 
-const ORDER: readonly ProductTab[] = ['build', 'individual']
+// Left to right: the units one at a time first, then the layout builder.
+const ORDER: readonly ProductTab[] = ['individual', 'build']
 
-export function ConfiguratorTabs({ buildLabel, individualLabel, openingTab, build, individual }: ConfiguratorTabsProps) {
+export function ConfiguratorTabs({ slug, buildLabel, individualLabel, openingTab, build, individual }: ConfiguratorTabsProps) {
   const [active, setActive] = useState<ProductTab>(openingTab)
+  // The gallery shows the layout only while its tab is the open one.
+  useEffect(() => {
+    publishActiveTab(slug, active)
+  }, [slug, active])
   const baseId = useId()
   const tabRefs = useRef<Record<ProductTab, HTMLButtonElement | null>>({ build: null, individual: null })
   const labels: Record<ProductTab, string> = { build: buildLabel, individual: individualLabel }
@@ -68,6 +76,15 @@ export function ConfiguratorTabs({ buildLabel, individualLabel, openingTab, buil
         ))}
       </div>
       <div
+        id={`${baseId}-individual-panel`}
+        role="tabpanel"
+        aria-labelledby={`${baseId}-individual-tab`}
+        className="mcf-tab-panel"
+        hidden={active !== 'individual'}
+      >
+        {individual}
+      </div>
+      <div
         id={`${baseId}-build-panel`}
         role="tabpanel"
         aria-labelledby={`${baseId}-build-tab`}
@@ -76,15 +93,6 @@ export function ConfiguratorTabs({ buildLabel, individualLabel, openingTab, buil
         hidden={active !== 'build'}
       >
         {build}
-      </div>
-      <div
-        id={`${baseId}-individual-panel`}
-        role="tabpanel"
-        aria-labelledby={`${baseId}-individual-tab`}
-        className="mcf-tab-panel"
-        hidden={active !== 'individual'}
-      >
-        {individual}
       </div>
     </div>
   )

@@ -26,6 +26,8 @@ export interface AddLayoutRequest {
   arrangement: string
   code: string
   layoutQuantity: number
+  /** Choices for every line, under another module's own keys (a delivery service). */
+  extraMeta: Record<string, string>
 }
 
 function freshLayoutId(): string {
@@ -64,7 +66,7 @@ export function addLayoutToBasket(request: AddLayoutRequest): number {
       quantity: line.quantity,
     })
     if (index === 0) companionLines.push(...companions.lines)
-    return withCompanionMeta(line, companions.mainMeta)
+    return withCompanionMeta({ ...line, meta: { ...request.extraMeta, ...line.meta } }, companions.mainMeta)
   })
 
   // The basket lists newest first, so the first unit goes in last and heads the

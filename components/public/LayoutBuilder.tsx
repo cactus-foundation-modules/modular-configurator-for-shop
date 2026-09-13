@@ -8,7 +8,13 @@
 // ready-made shapes; choosing one (or "Design your own") starts the builder, and
 // only then does the 3D view load. The layout is written into the address bar, so
 // the link in hand reopens it.
+//
+// The view itself normally sits in the product gallery, in place of the main
+// photograph (see GalleryLayoutMedia): this publishes what it should draw, and
+// taps on it come back here. Only on a page with no gallery to host it does the
+// view appear in this tab instead.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ChainEnd } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { formatMoney } from '@/modules/shop/lib/money'
 import { useVariationSelection } from '@/modules/shop-variations/lib/use-variation-selection'
 import type { PackedVariationBootstrap } from '@/modules/shop-variations/lib/variation-bootstrap-pack'
@@ -21,7 +27,9 @@ import { addLayoutToBasket } from '@/modules/modular-configurator-for-shop/compo
 import { LayoutWorkspace } from '@/modules/modular-configurator-for-shop/components/public/LayoutWorkspace'
 import { PresetStart, type PresetTileView } from '@/modules/modular-configurator-for-shop/components/public/PresetStart'
 import { useLayoutBuilder } from '@/modules/modular-configurator-for-shop/components/public/use-layout-builder'
+import { publishLayoutStage, useLayoutStageState, type LayoutStageSnapshot } from '@/modules/modular-configurator-for-shop/components/public/layout-stage-store'
 import {
+  joinableSpaces,
   layoutChoicesFrom,
   otherOptionsOf,
   pieceLookup,
@@ -49,6 +57,10 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
   // shapes, unless the shopper had asked for an empty builder.
   const [designingOwn, setDesigningOwn] = useState(false)
   const [statusText, setStatusText] = useState<string | null>(null)
+  // Which open end's "add a unit" list is showing. Held here, not in the
+  // workspace, because a tap on a dashed space in the gallery opens it too.
+  const [pickerEnd, setPickerEnd] = useState<ChainEnd | null>(null)
+  const { activeTab, hosts } = useLayoutStageState(storefront.slug)
 
   const pieceById = useMemo(() => pieceLookup(storefront.pieces), [storefront.pieces])
   const labelFor = useCallback((pieceId: string) => pieceById.get(pieceId)?.label ?? 'Unit', [pieceById])
@@ -124,9 +136,10 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
     return names.length > 0 ? `Prices shown in ${names.join(', ')}` : ''
   }, [payload, storefront.pieceOptionId, layoutChoices])
 
-  const addToBasket = (layoutQuantity: number) => {
+  const addToBasket = (layoutQuantity: number, deliveryMeta: Record<string, string>) => {
     if (!view || !view.price.buyable || !payload) return
     const lines = addLayoutToBasket({
+      extraMeta: deliveryMeta,
       slug: storefront.slug,
       parentProductId: storefront.parentProductId,
       units: view.price.units,
@@ -140,7 +153,56 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
   }
 
   const started = designingOwn || builder.draft.chain.length > 0
-  if (!started || !payload || !view) {
+  const isEmpty = builder.draft.chain.length === 0
+  const ghosts = useMemo(() => (view ? joinableSpaces(view, isEmpty) : []), [view, isEmpty])
+
+  const selectUnit = useCallback(
+    (entryId: string | null) => {
+      setPickerEnd(null)
+      dispatch({ type: 'select', entryId })
+    },
+    [dispatch],
+  )
+  const openPicker = useCallback(
+    (end: ChainEnd) => {
+      dispatch({ type: 'select', entryId: null })
+      setPickerEnd(end)
+    },
+    [dispatch],
+  )
+
+  // What the layout view draws, published for the gallery (or the inline view)
+  // to pick up. Null until a layout is started: before that the gallery keeps
+  // its photographs and offers no layout thumbnail.
+  const snapshot = useMemo<LayoutStageSnapshot | null>(() => {
+    if (!started || !view) return null
+    return {
+      revision: builder.editCount,
+      wanted: activeTab !== 'individual',
+      parentProductId: storefront.parentProductId,
+      look: storefront.viewer,
+      placed: builder.placed,
+      pieceById,
+      childIdByEntry: view.childIdByEntry,
+      ghosts,
+      selectedEntryId: builder.selectedEntryId,
+      widthText: view.widthText,
+      depthText: view.depthText,
+      summaryText: isEmpty ? 'Tap the + to place your first unit' : `${view.shapeLabel} · ${view.unitCountText} · ${view.footprintText}`,
+      arrangementText: view.arrangementText,
+      isEmpty,
+      labelFor,
+      onSelectUnit: selectUnit,
+      onPickGhost: openPicker,
+    }
+  }, [started, view, builder.editCount, builder.placed, builder.selectedEntryId, activeTab, storefront, pieceById, ghosts, isEmpty, labelFor, selectUnit, openPicker])
+
+  useEffect(() => {
+    publishLayoutStage(storefront.slug, snapshot)
+  }, [storefront.slug, snapshot])
+  useEffect(() => () => publishLayoutStage(storefront.slug, null), [storefront.slug])
+
+  if (!started || !payload || !view || !snapshot) {
     return (
       <PresetStart
         intro={intro}
@@ -169,11 +231,23 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       priceSuffix={selection.priceSuffix}
       builder={builder}
       view={view}
+      snapshot={snapshot}
+      viewInGallery={hosts > 0}
+      pickerEnd={pickerEnd}
+      onOpenPicker={openPicker}
+      onClosePicker={() => setPickerEnd(null)}
+      onSelectUnit={selectUnit}
       layoutChoices={layoutChoices}
       statusText={statusText}
       onChooseLayoutValue={(optionId, valueId) => {
         setStatusText(null)
         selection.setOption(optionId, valueId)
+      }}
+      onReset={() => {
+        setPickerEnd(null)
+        setStatusText(null)
+        setDesigningOwn(false)
+        dispatch({ type: 'clear' })
       }}
       onAddToBasket={addToBasket}
     />

@@ -1,32 +1,36 @@
 'use client'
 
-// The layout builder, laid out down the product page's purchase column: the view
-// (the 3D model, or the plan from above), what to add and why not, the units in
-// order and the selected one, starting shapes, the layout's own options, and the
-// price with the add button last - the same order a shopper reads the rest of
-// the purchase area in.
+// The layout builder's controls, laid out down the product page's purchase
+// column: what to add and why not, the units in order and the selected one,
+// starting shapes, the layout's own options, and the price with the add button
+// last - the same order, and the same look, as the individual tab's price,
+// delivery box and buy row.
 //
-// It owns only what is about viewing (3D or plan, sizes on or off, which end's
-// picker is open, how many layouts). The layout belongs to LayoutBuilder.
-import { useMemo, useState } from 'react'
+// The view of the layout normally lives in the product gallery; it is drawn here
+// only when the page has no gallery to host it. This owns how many layouts and the
+// delivery choice - the layout, the selection and the open picker belong to
+// LayoutBuilder.
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatMoney } from '@/modules/shop/lib/money'
 import { swapOptions } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import type { ChainEnd } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { priceLayout } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { refusalSentence, unitProblemSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
 import type { ConfiguratorStorefrontPayload } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import type { OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
 import type { VariantSelectorPayload } from '@/modules/shop-variations/lib/types'
-import { LayoutPlan, type PlanGhost } from '@/modules/modular-configurator-for-shop/components/public/LayoutPlan'
-import { LayoutStageLazy } from '@/modules/modular-configurator-for-shop/components/public/LayoutStageLazy'
+import type { ChainEnd } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import type { LayoutStageSnapshot } from '@/modules/modular-configurator-for-shop/components/public/layout-stage-store'
+import { LayoutStageView } from '@/modules/modular-configurator-for-shop/components/public/LayoutStageView'
 import { OptionChoices } from '@/modules/modular-configurator-for-shop/components/public/OptionChoices'
 import { PiecePicker } from '@/modules/modular-configurator-for-shop/components/public/PiecePicker'
 import { UnitEditor } from '@/modules/modular-configurator-for-shop/components/public/UnitEditor'
+import { LayoutDeliveryPicker } from '@/modules/modular-configurator-for-shop/components/public/LayoutDeliveryPicker'
+import { useLayoutDelivery } from '@/modules/modular-configurator-for-shop/components/public/use-layout-delivery'
+import { deliveryLinesFor } from '@/modules/modular-configurator-for-shop/lib/layout-delivery'
 import type { useLayoutBuilder } from '@/modules/modular-configurator-for-shop/components/public/use-layout-builder'
 import { otherOptionsOf, pieceLookup, type LayoutView } from '@/modules/modular-configurator-for-shop/components/public/use-layout-view'
 
 type LayoutBuilderState = ReturnType<typeof useLayoutBuilder>
-type ViewChoice = '3d' | 'plan'
 
 interface LayoutWorkspaceProps {
   storefront: ConfiguratorStorefrontPayload
@@ -35,10 +39,20 @@ interface LayoutWorkspaceProps {
   priceSuffix: string
   builder: LayoutBuilderState
   view: LayoutView
+  snapshot: LayoutStageSnapshot
+  /** True when the product gallery is showing the layout, so no view is drawn here. */
+  viewInGallery: boolean
+  pickerEnd: ChainEnd | null
+  onOpenPicker: (end: ChainEnd) => void
+  onClosePicker: () => void
+  onSelectUnit: (entryId: string | null) => void
   layoutChoices: OptionSelection
   statusText: string | null
   onChooseLayoutValue: (optionId: string, valueId: string) => void
-  onAddToBasket: (layoutQuantity: number) => void
+  /** Starts the layout again, back to the shapes. */
+  onReset: () => void
+  /** `deliveryMeta` is the shopper's delivery choice as line meta, or empty for the basket's own. */
+  onAddToBasket: (layoutQuantity: number, deliveryMeta: Record<string, string>) => void
 }
 
 const MAX_LAYOUT_QUANTITY = 20
@@ -50,18 +64,23 @@ export function LayoutWorkspace({
   priceSuffix,
   builder,
   view,
+  snapshot,
+  viewInGallery,
+  pickerEnd,
+  onOpenPicker,
+  onClosePicker,
+  onSelectUnit,
   layoutChoices,
   statusText,
   onChooseLayoutValue,
+  onReset,
   onAddToBasket,
 }: LayoutWorkspaceProps) {
-  const [viewChoice, setViewChoice] = useState<ViewChoice>('3d')
-  const [showDimensions, setShowDimensions] = useState(true)
-  const [pickerEnd, setPickerEnd] = useState<ChainEnd | null>(null)
   const [layoutQuantity, setLayoutQuantity] = useState(1)
-  const [unitsLoading, setUnitsLoading] = useState(0)
+  const [deliveryChoice, setDeliveryChoice] = useState<string | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
 
-  const { draft, placed, selectedEntryId, refusal, dispatch, canUndo } = builder
+  const { draft, selectedEntryId, refusal, dispatch, canUndo } = builder
   const pieceById = useMemo(() => pieceLookup(storefront.pieces), [storefront.pieces])
   const definitions = useMemo(
     () => new Map(storefront.pieces.map((piece) => [piece.pieceId, piece.definition])),
@@ -71,14 +90,11 @@ export function LayoutWorkspace({
   const labelFor = (pieceId: string) => pieceById.get(pieceId)?.label ?? 'Unit'
   const money = (amount: number) => formatMoney(amount, currencySymbol)
 
-  const chooseEnd = (end: ChainEnd) => {
-    dispatch({ type: 'select', entryId: null })
-    setPickerEnd(end)
-  }
-  const selectUnit = (entryId: string | null) => {
-    setPickerEnd(null)
-    dispatch({ type: 'select', entryId })
-  }
+  // A space tapped in the gallery opens its list down here, possibly out of
+  // sight on a phone - so bring it into view whenever one opens.
+  useEffect(() => {
+    if (pickerEnd) pickerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [pickerEnd])
 
   const priceOfPieceAlone = (pieceId: string): number | null =>
     priceLayout(payload, storefront.pieceOptionId, [{ entryId: 'probe', pieceId }], layoutChoices, {}).units[0]?.variant?.price ?? null
@@ -90,18 +106,18 @@ export function LayoutWorkspace({
   }
 
   const isEmpty = draft.chain.length === 0
-  // Memoised on the layout so the 3D scene is only handed new spaces when they move.
-  const planGhosts = useMemo<PlanGhost[]>(
-    () =>
-      (['start', 'end'] as const).flatMap((end) => {
-        const endView = view.ends[end]
-        if (!endView.ghost || (end === 'start' && isEmpty)) return []
-        const label = isEmpty ? 'Add your first unit' : `Add a unit ${endView.besideText}`
-        return [{ end, footprint: endView.ghost.footprint, label }]
-      }),
-    [view.ends, isEmpty],
+
+  // One layout's variations and how many of each - what the basket is asked
+  // about for delivery. Only once every unit is a real variation.
+  const units = view.price.units
+  const deliveryLines = useMemo(() => deliveryLinesFor(units), [units])
+  const { delivery } = useLayoutDelivery(deliveryLines, deliveryChoice, currencySymbol)
+  // Written onto the lines only when the shopper picked something other than what
+  // the basket would pick anyway - a default nobody chose is not a choice to freeze.
+  const deliveryMeta = useMemo<Record<string, string>>(
+    () => (delivery && delivery.control.value !== delivery.defaultValue ? { [delivery.metaKey]: delivery.control.value } : {}),
+    [delivery],
   )
-  const sceneGhosts = useMemo(() => planGhosts.map(({ end, footprint }) => ({ end, footprint })), [planGhosts])
 
   const selectedIndex = draft.chain.findIndex((entry) => entry.entryId === selectedEntryId)
   const selectedEntry = selectedIndex >= 0 ? draft.chain[selectedIndex] : undefined
@@ -115,58 +131,7 @@ export function LayoutWorkspace({
 
   return (
     <div className="mcf-workspace">
-      <div className="mcf-stage">
-        {/* Both views stay mounted, so switching back to 3D does not rebuild the scene. */}
-        <div className="mcf-stage-view" hidden={viewChoice !== '3d'}>
-          <LayoutStageLazy
-            parentProductId={storefront.parentProductId}
-            look={storefront.viewer}
-            placed={placed}
-            pieceById={pieceById}
-            childIdByEntry={view.childIdByEntry}
-            ghosts={sceneGhosts}
-            selectedEntryId={selectedEntryId}
-            showDimensions={showDimensions}
-            widthText={view.widthText}
-            depthText={view.depthText}
-            onSelectUnit={selectUnit}
-            onPickGhost={chooseEnd}
-            onLoadingChange={setUnitsLoading}
-          />
-        </div>
-        <div className="mcf-stage-view mcf-stage-plan" hidden={viewChoice !== 'plan'}>
-          <LayoutPlan
-            className="mcf-plan"
-            placed={placed}
-            labelFor={labelFor}
-            description={isEmpty ? 'Empty layout plan' : `Plan of your layout: ${view.arrangementText}`}
-            interactive
-            selectedEntryId={selectedEntryId}
-            ghosts={planGhosts}
-            showDimensions={showDimensions}
-            onSelect={(entryId) => selectUnit(entryId === selectedEntryId ? null : entryId)}
-            onAdd={chooseEnd}
-          />
-        </div>
-        <div className="mcf-stage-tools">
-          <button type="button" className="mcf-chip" aria-pressed={viewChoice === '3d'} onClick={() => setViewChoice('3d')}>
-            3D
-          </button>
-          <button type="button" className="mcf-chip" aria-pressed={viewChoice === 'plan'} onClick={() => setViewChoice('plan')}>
-            Plan
-          </button>
-          <button type="button" className="mcf-chip" aria-pressed={showDimensions} onClick={() => setShowDimensions((value) => !value)}>
-            Sizes
-          </button>
-        </div>
-        <p className="mcf-stage-caption" aria-live="polite">
-          {unitsLoading > 0 && viewChoice === '3d'
-            ? 'Bringing the units in…'
-            : isEmpty
-              ? 'Tap the + to place your first unit'
-              : `${view.shapeLabel} · ${view.unitCountText} · ${view.footprintText}`}
-        </p>
-      </div>
+      {viewInGallery ? null : <LayoutStageView snapshot={snapshot} fill={false} />}
 
       {refusal ? (
         <div className="mcf-notice" role="status">
@@ -178,6 +143,7 @@ export function LayoutWorkspace({
       ) : null}
 
       {pickerView && pickerEnd ? (
+        <div ref={pickerRef}>
         <PiecePicker
           heading={isEmpty ? 'Choose your first unit' : `Add a unit ${pickerView.besideText}`}
           candidates={pickerView.candidates}
@@ -187,10 +153,11 @@ export function LayoutWorkspace({
           maxPieces={storefront.maxPieces}
           onPick={(pieceId) => {
             dispatch({ type: 'add', end: pickerEnd, pieceId })
-            setPickerEnd(null)
+            onClosePicker()
           }}
-          onCancel={() => setPickerEnd(null)}
+          onCancel={onClosePicker}
         />
+        </div>
       ) : null}
 
       <section className="mcf-section" aria-labelledby="mcf-your-layout">
@@ -202,16 +169,27 @@ export function LayoutWorkspace({
             <button type="button" className="mcf-link-button" disabled={!canUndo} onClick={() => dispatch({ type: 'undo' })}>
               Undo
             </button>
-            {!isEmpty ? (
-              <button type="button" className="mcf-link-button" onClick={() => dispatch({ type: 'clear' })}>
-                Start again
-              </button>
-            ) : null}
           </div>
         </div>
         <p className="mcf-section-note">
-          Tap a dashed space to add a unit there. Tap a unit to swap it, change its fabric or take it out.
+          Tap a dashed space in the picture, or a button below, to add a unit there. Tap a unit to swap it, change its
+          fabric or take it out.
         </p>
+        {snapshot.ghosts.length > 0 ? (
+          <div className="mcf-row">
+            {snapshot.ghosts.map((ghost) => (
+              <button
+                key={ghost.end}
+                type="button"
+                className="mcf-chip"
+                aria-pressed={pickerEnd === ghost.end}
+                onClick={() => onOpenPicker(ghost.end)}
+              >
+                + {ghost.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {selectedEntry ? (
           <UnitEditor
@@ -225,7 +203,7 @@ export function LayoutWorkspace({
             onSwap={(pieceId) => dispatch({ type: 'swap', entryId: selectedEntry.entryId, pieceId })}
             onChoose={(optionId, valueId) => dispatch({ type: 'set-unit-choice', entryId: selectedEntry.entryId, optionId, valueId })}
             onRemove={() => dispatch({ type: 'remove', entryId: selectedEntry.entryId })}
-            onClose={() => selectUnit(null)}
+            onClose={() => onSelectUnit(null)}
           />
         ) : null}
 
@@ -246,7 +224,7 @@ export function LayoutWorkspace({
                     type="button"
                     className="mcf-unit-select"
                     aria-pressed={unit.entry.entryId === selectedEntryId}
-                    onClick={() => selectUnit(unit.entry.entryId)}
+                    onClick={() => onSelectUnit(unit.entry.entryId)}
                   >
                     <span className="mcf-unit-name">{view.labels[index]}</span>
                     {unit.problem ? (
@@ -276,7 +254,7 @@ export function LayoutWorkspace({
                 type="button"
                 className="mcf-chip"
                 onClick={() => {
-                  setPickerEnd(null)
+                  onClosePicker()
                   dispatch({ type: 'start-from', pieceIds: preset.pieceIds, byShopper: true })
                 }}
               >
@@ -308,38 +286,48 @@ export function LayoutWorkspace({
       })}
 
       <div className="mcf-ws-foot">
-        <div className="mcf-summary-lines">
-          <div className="mcf-price">
-            <span className="mcf-price-total">{money(view.price.total * layoutQuantity)}</span>
-            {priceSuffix ? <span className="mcf-price-note">{priceSuffix}</span> : null}
-            {view.price.compareAtTotal !== null ? (
-              <span className="mcf-price-was">{money(view.price.compareAtTotal * layoutQuantity)}</span>
-            ) : null}
-            {view.price.retailTotal !== null ? (
-              <span className="mcf-price-note">RRP {money(view.price.retailTotal * layoutQuantity)}</span>
-            ) : null}
-          </div>
-          <p className={addBlockedBecause ? 'mcf-status mcf-status--problem' : 'mcf-status'}>
-            {addBlockedBecause ?? `${view.shapeLabel} · ${view.countsText}`}
-          </p>
+        <div className="mcf-price-block">
+          <span className="mcf-price-now">{money(view.price.total * layoutQuantity)}</span>
+          {view.price.compareAtTotal !== null ? (
+            <span className="mcf-price-was">{money(view.price.compareAtTotal * layoutQuantity)}</span>
+          ) : null}
+          {view.price.retailTotal !== null ? (
+            <span className="mcf-price-rrp">RRP {money(view.price.retailTotal * layoutQuantity)}</span>
+          ) : null}
+          {priceSuffix ? <span className="mcf-price-note">{priceSuffix}</span> : null}
+          <button type="button" className="mcf-reset" onClick={onReset}>
+            Reset options
+          </button>
         </div>
-        <div className="mcf-actions">
-          <div className="mcf-stepper" role="group" aria-label="How many of this layout">
+        <p className={addBlockedBecause ? 'mcf-status mcf-status--problem' : 'mcf-status'}>
+          {addBlockedBecause ?? `${view.shapeLabel} · ${view.countsText}`}
+        </p>
+
+        {delivery ? (
+          <LayoutDeliveryPicker
+            delivery={delivery}
+            itemCount={draft.chain.length * layoutQuantity}
+            layoutQuantity={layoutQuantity}
+            currencySymbol={currencySymbol}
+            onChange={setDeliveryChoice}
+          />
+        ) : null}
+
+        <div className="mcf-buy-row">
+          <div className="mcf-qty" role="group" aria-label="How many of this layout">
             <button
               type="button"
-              className="mcf-icon-button"
               aria-label="One fewer"
               disabled={layoutQuantity <= 1}
               onClick={() => setLayoutQuantity((value) => Math.max(1, value - 1))}
             >
               −
             </button>
-            <span className="mcf-stepper-value" aria-live="polite">
+            <span className="mcf-qty-value" aria-live="polite">
               {layoutQuantity}
             </span>
             <button
               type="button"
-              className="mcf-icon-button"
               aria-label="One more"
               disabled={layoutQuantity >= MAX_LAYOUT_QUANTITY}
               onClick={() => setLayoutQuantity((value) => Math.min(MAX_LAYOUT_QUANTITY, value + 1))}
@@ -349,9 +337,9 @@ export function LayoutWorkspace({
           </div>
           <button
             type="button"
-            className="mcf-button mcf-button--wide"
+            className="mcf-add"
             disabled={addBlockedBecause !== null || !view.price.buyable}
-            onClick={() => onAddToBasket(layoutQuantity)}
+            onClick={() => onAddToBasket(layoutQuantity, deliveryMeta)}
           >
             Add layout to basket
           </button>

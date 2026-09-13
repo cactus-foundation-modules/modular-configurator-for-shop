@@ -67,3 +67,7 @@ export function describeArrangement(labels: readonly string[]): string {
 export function unitCountLabel(count: number): string {
   return count === 1 ? '1 unit' : `${count} units`
 }
+
+export function itemCountLabel(count: number): string {
+  return count === 1 ? '1 item' : `${count} items`
+}
