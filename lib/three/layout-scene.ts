@@ -5,7 +5,7 @@
 //
 // Pattern: an imperative scene object owned by one React island (LayoutStage).
 // React tells it WHAT should be there (units with their poses and sources,
-// ghosts, selection, view mode) and it works out HOW to get there - loading
+// ghosts, selection, sizes) and it works out HOW to get there - loading
 // models, easing units into their new places, reframing the camera - on its own
 // animation loop, drawing only when something moved. It never reads React state
 // and never decides anything about the layout itself: every pose it is handed
@@ -46,8 +46,6 @@ export interface SceneGhost {
   end: ChainEnd
   footprint: FloorRectangle
 }
-
-export type SceneViewMode = 'angled' | 'above'
 
 export interface SceneCallbacks {
   onSelectUnit: (entryId: string | null) => void
@@ -91,8 +89,6 @@ const MILLIMETRES_PER_METRE = 1000
 const FIELD_OF_VIEW = 40
 const ANGLED_POLAR = (58 * Math.PI) / 180
 const ANGLED_AZIMUTH = (28 * Math.PI) / 180
-/** Straight down trips OrbitControls' up-vector maths; a hair off it does not. */
-const ABOVE_POLAR = 0.0001
 const DIMENSION_OFFSET = 0.22
 const CLICK_SLOP_PX = 6
 const EASE_RATE = 9
@@ -117,7 +113,6 @@ export class LayoutScene {
   private bounds: FloorRectangle | null = null
   private selectedEntryId: string | null = null
   private dimensionsVisible = false
-  private viewMode: SceneViewMode = 'angled'
   private cameraGoal: CameraGoal | null = null
   private userHasMovedCamera = false
   private loading = 0
@@ -244,18 +239,6 @@ export class LayoutScene {
     this.labels.width.hidden = !this.dimensionGroup.visible
     this.labels.depth.hidden = !this.dimensionGroup.visible
     this.needsRender = true
-  }
-
-  setViewMode(mode: SceneViewMode): void {
-    if (mode === this.viewMode) return
-    this.viewMode = mode
-    this.userHasMovedCamera = false
-    this.frameLayout()
-  }
-
-  resetView(): void {
-    this.userHasMovedCamera = false
-    this.frameLayout()
   }
 
   resize(width: number, height: number): void {
@@ -529,7 +512,7 @@ export class LayoutScene {
     this.controls.update()
   }
 
-  /** Eases the camera round to show the whole layout, keeping the shopper's angle unless the mode says otherwise. */
+  /** Eases the camera round to show the whole layout, keeping the shopper's own angle once they have turned it. */
   private frameLayout(immediate = false): void {
     const bounds = this.bounds ?? { minX: -400, maxX: 400, minZ: -400, maxZ: 400 }
     const width = toMetres(bounds.maxX - bounds.minX)
@@ -540,14 +523,13 @@ export class LayoutScene {
     const distance = (radius / Math.sin(Math.min(verticalHalf, horizontalHalf))) * 1.05
     this.controls.minDistance = radius * 0.5
     this.controls.maxDistance = distance * 3
-    const angled = this.viewMode === 'angled'
     const goal: CameraGoal = {
       targetX: toMetres((bounds.minX + bounds.maxX) / 2),
-      targetY: angled ? 0.3 : 0,
+      targetY: 0.3,
       targetZ: toMetres((bounds.minZ + bounds.maxZ) / 2),
       distance,
-      polar: this.userHasMovedCamera ? null : angled ? ANGLED_POLAR : ABOVE_POLAR,
-      azimuth: this.userHasMovedCamera ? null : angled ? ANGLED_AZIMUTH : 0,
+      polar: this.userHasMovedCamera ? null : ANGLED_POLAR,
+      azimuth: this.userHasMovedCamera ? null : ANGLED_AZIMUTH,
     }
     if (immediate || this.theme.reducedMotion) {
       const current = this.currentSpherical()

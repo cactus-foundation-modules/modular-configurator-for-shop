@@ -1,16 +1,27 @@
-// The layout builder's storefront styles, mounted once per page by the card.
+// The layout builder's storefront styles, mounted once per page by the tabs.
 // Every colour is a theme token, so the builder follows the site's light and
-// dark schemes. The root carries data-cactus-unstyled (see ConfiguratorCard), so
-// core's site-wide button hover fill does not reach in here and every :hover
-// below is the builder's own.
+// dark schemes. The tab bar and the builder panel carry data-cactus-unstyled (see
+// ConfiguratorTabs), so core's site-wide button hover fill does not reach in and
+// every :hover below is the builder's own; the individual panel is left alone.
 //
 // One big template string: no backticks anywhere inside it.
 export const CONFIGURATOR_CSS = `
-.mcf-card{display:grid;gap:.875rem;padding:1rem;border:1px solid var(--color-border);border-radius:var(--radius-lg,12px);background:var(--color-surface);color:var(--color-text)}
-.mcf-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem}
-.mcf-card-title{margin:0;font-family:var(--font-heading,inherit);font-size:1.0625rem;font-weight:700;line-height:1.3;text-wrap:balance}
-.mcf-card-intro{margin:.25rem 0 0;color:var(--color-text-muted);font-size:.875rem;line-height:1.45}
-.mcf-badge{flex:none;padding:.2rem .55rem;border-radius:var(--radius-pill,999px);background:var(--color-primary-subtle);color:var(--color-text);font-size:.75rem;font-weight:600;white-space:nowrap}
+.mcf-tabs-root{display:grid;gap:1rem}
+.mcf-tabs{display:flex;gap:.25rem;padding:.25rem;border:1px solid var(--color-border);border-radius:var(--radius-pill,999px);background:var(--color-bg-subtle)}
+.mcf-tab{flex:1 1 0;min-height:2.75rem;padding:.5rem .875rem;border:0;border-radius:var(--radius-pill,999px);background:transparent;color:var(--color-text);font:inherit;font-weight:600;cursor:pointer}
+.mcf-tab:hover{background:var(--color-primary-subtle)}
+.mcf-tab[aria-selected="true"]{background:var(--color-primary);color:var(--color-on-primary)}
+.mcf-tab:focus-visible{outline:2px solid var(--color-border-focus,var(--color-primary));outline-offset:2px}
+.mcf-tab-panel{min-width:0}
+.mcf-tab-panel[hidden],.mcf-stage-view[hidden]{display:none!important}
+.mcf-start{display:grid;gap:.75rem;color:var(--color-text)}
+.mcf-workspace{display:grid;gap:1rem;color:var(--color-text)}
+.mcf-stage{position:relative;width:100%;aspect-ratio:4/3;max-height:34rem;border:1px solid var(--color-border);border-radius:var(--radius-lg,12px);background:var(--color-bg-subtle);overflow:hidden}
+.mcf-stage-view{position:absolute;inset:0}
+.mcf-stage-plan{display:grid;place-items:center;padding:3.25rem .75rem 2.75rem}
+.mcf-plan{display:block;width:100%;height:100%}
+.mcf-ws-foot{display:grid;gap:.625rem;padding-top:1rem;border-top:1px solid var(--color-border)}
+.mcf-card-intro{margin:0;color:var(--color-text-muted);font-size:.875rem;line-height:1.45}
 .mcf-presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,8.5rem),1fr));gap:.5rem}
 .mcf-preset{display:grid;gap:.375rem;align-content:start;padding:.625rem;border:1px solid var(--color-border);border-radius:var(--radius-md,8px);background:var(--color-bg);color:var(--color-text);text-align:left;cursor:pointer;font:inherit}
 .mcf-preset:hover{border-color:var(--color-primary);background:var(--color-primary-subtle)}
@@ -20,11 +31,7 @@ export const CONFIGURATOR_CSS = `
 .mcf-preset-meta{color:var(--color-text-muted);font-size:.75rem;font-variant-numeric:tabular-nums}
 .mcf-preset--own{place-content:center;justify-items:center;min-height:7.25rem;border-style:dashed;text-align:center}
 .mcf-plus{display:grid;place-items:center;width:2rem;height:2rem;border-radius:50%;background:var(--color-primary-subtle);color:var(--color-primary);font-size:1.25rem;line-height:1}
-.mcf-summary{display:grid;grid-template-columns:minmax(0,9rem) minmax(0,1fr);gap:.875rem;align-items:center}
-.mcf-summary-plan{display:block;width:100%;height:6.5rem;border-radius:var(--radius-md,8px);background:var(--color-bg-subtle)}
 .mcf-summary-lines{display:grid;gap:.2rem;min-width:0}
-.mcf-summary-shape{font-weight:700}
-.mcf-summary-detail{color:var(--color-text-muted);font-size:.8125rem;overflow-wrap:anywhere}
 .mcf-price{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .5rem;font-variant-numeric:tabular-nums}
 .mcf-price-total{font-family:var(--font-heading,inherit);font-size:1.5rem;font-weight:700;color:var(--color-text)}
 .mcf-price-note{color:var(--color-text-muted);font-size:.8125rem}
@@ -43,14 +50,6 @@ export const CONFIGURATOR_CSS = `
 .mcf-status--good{color:var(--color-success)}
 .mcf-status--problem{color:var(--color-error)}
 
-.mcf-dialog{width:min(1180px,calc(100vw - 2rem));max-width:none;height:min(820px,calc(100dvh - 2rem));max-height:none;padding:0;border:1px solid var(--color-border);border-radius:var(--radius-lg,12px);background:var(--color-surface);color:var(--color-text);box-shadow:var(--shadow-elevated);overflow:hidden}
-.mcf-dialog::backdrop{background:var(--color-overlay)}
-.mcf-workspace{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%}
-.mcf-ws-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem 1rem;border-bottom:1px solid var(--color-border)}
-.mcf-ws-title{margin:0;font-family:var(--font-heading,inherit);font-size:1.0625rem;font-weight:700}
-.mcf-ws-subtitle{margin:0;color:var(--color-text-muted);font-size:.8125rem}
-.mcf-ws-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(20rem,1fr);min-height:0}
-.mcf-stage{position:relative;min-height:0;background:var(--color-bg-subtle);border-right:1px solid var(--color-border)}
 .mcf-stage-canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
 .mcf-stage-tools{position:absolute;top:.75rem;left:.75rem;right:.75rem;display:flex;flex-wrap:wrap;gap:.375rem;pointer-events:none}
 .mcf-stage-tools>*{pointer-events:auto}
@@ -64,14 +63,11 @@ export const CONFIGURATOR_CSS = `
 .mcf-icon-button{display:inline-grid;place-items:center;width:2.25rem;height:2.25rem;border:1px solid var(--color-border);border-radius:var(--radius-md,8px);background:var(--color-surface);color:var(--color-text);font:inherit;font-size:1.125rem;cursor:pointer}
 .mcf-icon-button:hover{border-color:var(--color-primary);background:var(--color-primary-subtle)}
 .mcf-icon-button:disabled{opacity:.45;cursor:not-allowed}
-.mcf-panel{display:grid;align-content:start;gap:1.125rem;min-height:0;padding:1rem;overflow-y:auto;overscroll-behavior:contain}
 .mcf-section{display:grid;gap:.5rem}
 .mcf-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem}
 .mcf-section-title{margin:0;font-size:.875rem;font-weight:700}
 .mcf-section-note{margin:0;color:var(--color-text-muted);font-size:.8125rem}
 .mcf-row{display:flex;flex-wrap:wrap;gap:.375rem}
-.mcf-plan-wrap{position:relative;border:1px solid var(--color-border);border-radius:var(--radius-md,8px);background:var(--color-bg-subtle)}
-.mcf-plan{display:block;width:100%;height:13rem}
 .mcf-plan-unit{fill:var(--color-surface);stroke:var(--color-border-strong,var(--color-text-muted));stroke-width:1.5;vector-effect:non-scaling-stroke}
 .mcf-plan-back{fill:var(--color-text-muted)}
 .mcf-plan-arm{fill:var(--color-text-secondary,var(--color-text-muted))}
@@ -110,19 +106,15 @@ export const CONFIGURATOR_CSS = `
 .mcf-picker-option:disabled{cursor:not-allowed;color:var(--color-text-muted)}
 .mcf-picker-reason{grid-column:1/-1;font-size:.75rem;color:var(--color-text-muted)}
 .mcf-notice{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;padding:.5rem .75rem;border:1px solid var(--color-warning-border,var(--color-border));border-radius:var(--radius-md,8px);background:var(--color-warning-bg,var(--color-bg-subtle));color:var(--color-text);font-size:.8125rem}
-.mcf-ws-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem 1rem;padding:.75rem 1rem;border-top:1px solid var(--color-border);background:var(--color-surface)}
 .mcf-stepper{display:inline-flex;align-items:center;border:1px solid var(--color-border);border-radius:var(--radius-md,8px)}
 .mcf-stepper .mcf-icon-button{border:0}
 .mcf-stepper-value{min-width:2rem;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
 
-@media (max-width:820px){
-  .mcf-dialog{width:100vw;height:100dvh;border:0;border-radius:0}
-  .mcf-ws-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(15rem,42dvh) minmax(0,1fr)}
-  .mcf-stage{border-right:0;border-bottom:1px solid var(--color-border)}
-  .mcf-summary{grid-template-columns:minmax(0,1fr)}
+@media (max-width:640px){
+  .mcf-stage{aspect-ratio:1/1}
   .mcf-button--wide{flex-basis:100%}
 }
 @media (prefers-reduced-motion:no-preference){
-  .mcf-preset,.mcf-chip,.mcf-swatch,.mcf-button,.mcf-picker-option{transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
+  .mcf-tab,.mcf-preset,.mcf-chip,.mcf-swatch,.mcf-button,.mcf-picker-option{transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 }
 `

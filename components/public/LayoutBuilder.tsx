@@ -1,13 +1,13 @@
 'use client'
 
-// The live layout builder on a product page: the card in the purchase area, the
-// layout the shopper is building, and the workspace it opens.
+// The live layout builder, as the product page's "Build a layout" tab.
 //
-// It joins the page's own variation selection (the same store the option
-// controls beside it use, keyed by the product's slug), so a fabric chosen in the
-// builder is chosen on the page and the other way round. The layout lives here,
-// not in the workspace, so closing the builder keeps it; and it is written into
-// the address bar, so the link in hand reopens it.
+// It joins the page's own variation selection (the store the option controls in
+// the other tab use, keyed by the product's slug), so a fabric chosen here is
+// chosen there and the other way round. Before a layout exists it offers the
+// ready-made shapes; choosing one (or "Design your own") starts the builder, and
+// only then does the 3D view load. The layout is written into the address bar, so
+// the link in hand reopens it.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatMoney } from '@/modules/shop/lib/money'
 import { useVariationSelection } from '@/modules/shop-variations/lib/use-variation-selection'
@@ -16,11 +16,10 @@ import { placeChain } from '@/modules/modular-configurator-for-shop/lib/chain-ge
 import { decodeLayout, LAYOUT_PARAM } from '@/modules/modular-configurator-for-shop/lib/layout-code'
 import { priceLayout } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { unitCountLabel } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
-import { unitProblemSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
 import type { ConfiguratorStorefrontPayload } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import { addLayoutToBasket } from '@/modules/modular-configurator-for-shop/components/public/add-layout-to-basket'
-import { ConfiguratorCardView, type CardPresetView, type CardSummaryView } from '@/modules/modular-configurator-for-shop/components/public/ConfiguratorCardView'
 import { LayoutWorkspace } from '@/modules/modular-configurator-for-shop/components/public/LayoutWorkspace'
+import { PresetStart, type PresetTileView } from '@/modules/modular-configurator-for-shop/components/public/PresetStart'
 import { useLayoutBuilder } from '@/modules/modular-configurator-for-shop/components/public/use-layout-builder'
 import {
   layoutChoicesFrom,
@@ -29,14 +28,13 @@ import {
   useLayoutView,
 } from '@/modules/modular-configurator-for-shop/components/public/use-layout-view'
 
-interface ConfiguratorCardProps {
+interface LayoutBuilderProps {
   storefront: ConfiguratorStorefrontPayload
   bootstrap: PackedVariationBootstrap
-  heading: string
   intro: string
 }
 
-export function ConfiguratorCard({ storefront, bootstrap, heading, intro }: ConfiguratorCardProps) {
+export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderProps) {
   const selection = useVariationSelection(storefront.slug, bootstrap)
   const payload = selection.payload
   const definitions = useMemo(
@@ -46,7 +44,10 @@ export function ConfiguratorCard({ storefront, bootstrap, heading, intro }: Conf
   const limits = useMemo(() => ({ maxPieces: storefront.maxPieces }), [storefront.maxPieces])
   const builder = useLayoutBuilder(definitions, limits)
   const { dispatch } = builder
-  const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  // "Design your own" opens the builder with nothing in it. A preset or a link
+  // opens it by giving it a layout; "Start again" with no layout returns to the
+  // shapes, unless the shopper had asked for an empty builder.
+  const [designingOwn, setDesigningOwn] = useState(false)
   const [statusText, setStatusText] = useState<string | null>(null)
 
   const pieceById = useMemo(() => pieceLookup(storefront.pieces), [storefront.pieces])
@@ -99,9 +100,7 @@ export function ConfiguratorCard({ storefront, bootstrap, heading, intro }: Conf
     }
   }, [builder.editCount, code])
 
-  const money = (amount: number) => formatMoney(amount, selection.currencySymbol)
-
-  const presets = useMemo<CardPresetView[]>(() => {
+  const presets = useMemo<PresetTileView[]>(() => {
     if (!payload) return []
     return storefront.presets.map((preset, index) => {
       const chain = preset.pieceIds.map((pieceId, position) => ({ entryId: `p${index}-${position}`, pieceId }))
@@ -111,7 +110,7 @@ export function ConfiguratorCard({ storefront, bootstrap, heading, intro }: Conf
         name: preset.name,
         placed: placeChain(chain, definitions),
         unitCountText: unitCountLabel(chain.length),
-        priceText: price.buyable || price.total > 0 ? formatMoney(price.total, selection.currencySymbol) : '',
+        priceText: price.total > 0 ? formatMoney(price.total, selection.currencySymbol) : '',
       }
     })
   }, [payload, storefront.presets, storefront.pieceOptionId, layoutChoices, definitions, selection.currencySymbol])
@@ -125,22 +124,6 @@ export function ConfiguratorCard({ storefront, bootstrap, heading, intro }: Conf
     return names.length > 0 ? `Prices shown in ${names.join(', ')}` : ''
   }, [payload, storefront.pieceOptionId, layoutChoices])
 
-  const summary: CardSummaryView | null =
-    view && builder.draft.chain.length > 0
-      ? {
-          placed: builder.placed,
-          shapeText: `${view.shapeLabel} · ${view.unitCountText}`,
-          detailText: [view.footprintText, view.countsText].filter(Boolean).join(' · '),
-          priceText: money(view.price.total),
-          priceNote: selection.priceSuffix,
-          retailText: view.price.retailTotal !== null ? `RRP ${money(view.price.retailTotal)}` : null,
-          problemText: (() => {
-            const first = view.price.units.find((unit) => unit.problem !== null)
-            return first?.problem ? `Unit ${builder.draft.chain.indexOf(first.entry) + 1}: ${unitProblemSentence(first.problem)}` : null
-          })(),
-        }
-      : null
-
   const addToBasket = (layoutQuantity: number) => {
     if (!view || !view.price.buyable || !payload) return
     const lines = addLayoutToBasket({
@@ -152,57 +135,47 @@ export function ConfiguratorCard({ storefront, bootstrap, heading, intro }: Conf
       code: view.code,
       layoutQuantity,
     })
-    setWorkspaceOpen(false)
     const layouts = layoutQuantity === 1 ? 'Your layout is' : `${layoutQuantity} of your layout are`
     setStatusText(`${layouts} in the basket - ${unitCountLabel(builder.draft.chain.length * layoutQuantity)} across ${lines === 1 ? '1 line' : `${lines} lines`}.`)
   }
 
-  return (
-    <>
-      <ConfiguratorCardView
-        heading={heading}
+  const started = designingOwn || builder.draft.chain.length > 0
+  if (!started || !payload || !view) {
+    return (
+      <PresetStart
         intro={intro}
         labelFor={labelFor}
         presets={presets}
         pricesInText={pricesInText}
-        summary={summary}
-        statusText={statusText}
         onStartPreset={(key) => {
           const preset = storefront.presets[Number(key)]
           if (!preset) return
           dispatch({ type: 'start-from', pieceIds: preset.pieceIds, byShopper: true })
           setStatusText(null)
-          setWorkspaceOpen(true)
         }}
         onDesignOwn={() => {
           setStatusText(null)
-          setWorkspaceOpen(true)
-        }}
-        onEdit={() => {
-          setStatusText(null)
-          setWorkspaceOpen(true)
-        }}
-        onAddToBasket={() => addToBasket(1)}
-        onStartAgain={() => {
-          setStatusText(null)
-          dispatch({ type: 'clear' })
+          setDesigningOwn(true)
         }}
       />
-      {payload && view ? (
-        <LayoutWorkspace
-          open={workspaceOpen}
-          onClose={() => setWorkspaceOpen(false)}
-          storefront={storefront}
-          payload={payload}
-          currencySymbol={selection.currencySymbol}
-          priceSuffix={selection.priceSuffix}
-          builder={builder}
-          view={view}
-          layoutChoices={layoutChoices}
-          onChooseLayoutValue={(optionId, valueId) => selection.setOption(optionId, valueId)}
-          onAddToBasket={addToBasket}
-        />
-      ) : null}
-    </>
+    )
+  }
+
+  return (
+    <LayoutWorkspace
+      storefront={storefront}
+      payload={payload}
+      currencySymbol={selection.currencySymbol}
+      priceSuffix={selection.priceSuffix}
+      builder={builder}
+      view={view}
+      layoutChoices={layoutChoices}
+      statusText={statusText}
+      onChooseLayoutValue={(optionId, valueId) => {
+        setStatusText(null)
+        selection.setOption(optionId, valueId)
+      }}
+      onAddToBasket={addToBasket}
+    />
   )
 }

@@ -1,9 +1,9 @@
 {
   "name": "modular-configurator-for-shop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "tablePrefix": "mcf_",
   "description": "Let shoppers build a layout from a modular product's units in 3D - sofas, bench seating, anything that joins end to end and turns corners - and buy the whole arrangement in one go",
-  "requiresCoreVersion": "0.5.1601",
+  "requiresCoreVersion": "0.5.1605",
   "requiresModules": [
     {
       "name": "shop",

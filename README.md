@@ -26,9 +26,12 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
 
 ## Setting it up
 
-1. Install the module, then put the **Shop: Layout builder (modular products)** block in
-   the product page layout, near the options. It renders nothing on products that have
-   not switched it on, so the shared layout is the right place for it.
+1. Install the module, then put the **Shop: Layout builder tabs (modular products)** block
+   in the product page layout, straight after the short description, and drag the page's
+   option, price, delivery and Add to basket blocks into its **Shop individual items**
+   slot. Blocks that belong under both tabs (accessories, delivery links) go after it.
+   On a product without the builder the block shows its slot's blocks and nothing else -
+   no tabs - so the shared layout is the right place for it.
 2. On the product's edit screen, open **Layout builder**:
    - tick **Show the layout builder on this product**;
    - pick the option whose values are the units;
@@ -58,13 +61,18 @@ so they cannot disagree.
 
 ## What the shopper gets
 
-- **A card in the purchase area** with the ready-made shapes drawn to scale and priced
-  in the options chosen on the page, and "Design your own".
-- **The builder**, a full workspace: the 3D view (angled or from above, overall sizes on
-  or off), a plan with dashed spaces where a unit can join, the units in order, a panel
-  for the selected unit (swap it, give it its own fabric, take it out), the layout's own
-  options, undo, and the total with an "Add layout to basket" button. The plan does
-  everything the 3D view does, by keyboard.
+- **Two tabs under the short description**: "Build a layout" and "Shop individual items"
+  (both labels editable on the block). The page opens on the builder, unless its address
+  names a single unit - an advert's or a shared variation's link - when it opens on the
+  individual items, at the price that was clicked. A layout link always opens the builder.
+- **In "Build a layout"**, the ready-made shapes drawn to scale and priced in the options
+  chosen on the page, and "Design your own". Choosing one starts the builder in place: the
+  view (3D, or the plan from above, with overall sizes on or off), what can be added where
+  and why not, the units in order, a panel for the selected unit (swap it, give it its own
+  fabric, take it out), starting shapes, the layout's own options, undo, and the total with
+  an "Add layout to basket" button. The 3D view only loads once a layout is started. The
+  plan does everything the 3D view does, by keyboard.
+- **Both tabs share one set of choices**: a fabric picked in either is picked in the other.
 - **A link that reopens the layout**: `?modular-layout=left-unit.central-unit~upholstery-colour:rivet-olive.corner-unit`.
 - **One grouped set of basket lines** - one line per distinct variation, repeats folded
   into a quantity, the first unit heading the group with the layout's shape and

@@ -136,7 +136,7 @@ export function ModularConfiguratorEditor({ productId }: { productId: string }) 
       <p style={hintStyle}>
         For a product made of units that join end to end and turn corners - a modular sofa, bench seating. Shoppers
         put units together in 3D on the product page and buy the whole layout in one go. The block &quot;Shop: Layout
-        builder (modular products)&quot; has to be in the product page layout for it to show.
+        builder tabs (modular products)&quot; has to be in the product page layout for it to show.
       </p>
 
       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>

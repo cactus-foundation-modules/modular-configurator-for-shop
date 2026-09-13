@@ -5,10 +5,10 @@
 // lib/three/layout-scene.ts) decides how to animate there.
 //
 // Loaded only through LayoutStageLazy, so three.js reaches a shopper's browser
-// only once they open the builder.
+// only once they start building a layout.
 import { useEffect, useRef, useState } from 'react'
 import { layoutBounds, type ChainEnd, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
-import { LayoutScene, type SceneGhost, type SceneViewMode } from '@/modules/modular-configurator-for-shop/lib/three/layout-scene'
+import { LayoutScene, type SceneGhost } from '@/modules/modular-configurator-for-shop/lib/three/layout-scene'
 import { buildUnitModel } from '@/modules/modular-configurator-for-shop/lib/three/unit-model'
 import type { StorefrontPiece, StorefrontViewerLook } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import { prefersReducedMotion, resolveThemeColour } from '@/modules/modular-configurator-for-shop/components/public/theme-colour'
@@ -22,7 +22,6 @@ export interface LayoutStageProps {
   childIdByEntry: ReadonlyMap<string, string | null>
   ghosts: readonly SceneGhost[]
   selectedEntryId: string | null
-  viewMode: SceneViewMode
   showDimensions: boolean
   widthText: string
   depthText: string
@@ -42,7 +41,6 @@ export function LayoutStage(props: LayoutStageProps) {
     childIdByEntry,
     ghosts,
     selectedEntryId,
-    viewMode,
     showDimensions,
     widthText,
     depthText,
@@ -151,17 +149,13 @@ export function LayoutStage(props: LayoutStageProps) {
   }, [status, selectedEntryId])
 
   useEffect(() => {
-    if (status === 'ready') sceneRef.current?.setViewMode(viewMode)
-  }, [status, viewMode])
-
-  useEffect(() => {
     if (status === 'ready') sceneRef.current?.setDimensionsVisible(showDimensions)
   }, [status, showDimensions, placed])
 
   if (status === 'unavailable') {
     return (
       <div className="mcf-stage-fallback">
-        This device cannot show the 3D view. The plan beside it does everything the 3D view does.
+        This device cannot show the 3D view. Plan, above, does everything the 3D view does.
       </div>
     )
   }
