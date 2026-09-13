@@ -12,6 +12,7 @@ import type { KeyboardEvent, ReactElement } from 'react'
 import {
   curveCentre,
   curveLayOf,
+  halfCurveCentre,
   layoutBounds,
   pointOnPiece,
   type ChainEnd,
@@ -139,18 +140,24 @@ interface PlanUnitProps {
 }
 
 /**
- * A quarter of a ring as an SVG path, in the piece's own frame: between two
- * radii, from the direction `from` round to the direction `to` about `centre`.
+ * Part of a ring as an SVG path, in the piece's own frame: between two radii,
+ * round `centre` through each of `directions` in turn, a quarter turn at most
+ * between neighbours - [from, to] for a curve, [left, far, right] for a half curve.
  */
-function ringPath(centre: FloorVector, innerRadius: number, outerRadius: number, from: FloorVector, to: FloorVector): string {
+function ringPath(centre: FloorVector, innerRadius: number, outerRadius: number, directions: readonly FloorVector[]): string {
+  const first = directions[0]
+  const second = directions[1]
+  if (!first || !second) return ''
   // The SVG y axis is the layout's z, so a positive cross product is clockwise on screen.
-  const sweep = from.x * to.z - from.z * to.x > 0 ? 1 : 0
+  const sweep = first.x * second.z - first.z * second.x > 0 ? 1 : 0
   const at = (radius: number, direction: FloorVector) => `${centre.x + radius * direction.x} ${centre.z + radius * direction.z}`
+  const onward = directions.slice(1)
+  const back = [...directions].reverse().slice(1)
   return [
-    `M ${at(outerRadius, from)}`,
-    `A ${outerRadius} ${outerRadius} 0 0 ${sweep} ${at(outerRadius, to)}`,
-    `L ${at(innerRadius, to)}`,
-    `A ${innerRadius} ${innerRadius} 0 0 ${1 - sweep} ${at(innerRadius, from)}`,
+    `M ${at(outerRadius, first)}`,
+    ...onward.map((direction) => `A ${outerRadius} ${outerRadius} 0 0 ${sweep} ${at(outerRadius, direction)}`),
+    `L ${at(innerRadius, directions[directions.length - 1] ?? first)}`,
+    ...back.map((direction) => `A ${innerRadius} ${innerRadius} 0 0 ${1 - sweep} ${at(innerRadius, direction)}`),
     'Z',
   ].join(' ')
 }
@@ -174,12 +181,33 @@ function planShapeOf(piece: PlacedPiece): { body: ReactElement; numberAt: FloorV
       return {
         body: (
           <>
-            <path className="mcf-plan-unit" d={ringPath(centre, inner, width, from, to)} />
-            {shape.back === 'outside' ? <path className="mcf-plan-back" d={ringPath(centre, width - band, width, from, to)} /> : null}
-            {shape.back === 'inside' ? <path className="mcf-plan-back" d={ringPath(centre, inner, inner + band, from, to)} /> : null}
+            <path className="mcf-plan-unit" d={ringPath(centre, inner, width, [from, to])} />
+            {shape.back === 'outside' ? <path className="mcf-plan-back" d={ringPath(centre, width - band, width, [from, to])} /> : null}
+            {shape.back === 'inside' ? <path className="mcf-plan-back" d={ringPath(centre, inner, inner + band, [from, to])} /> : null}
           </>
         ),
         numberAt: { x: centre.x + seatRadius * middle.x, z: centre.z + seatRadius * middle.z },
+      }
+    }
+    case 'half-curve': {
+      const lay = curveLayOf(shape.back, piece.entry.flipped)
+      const centre = halfCurveCentre(depth, lay)
+      // From the left cut end round the far side of the ring to the right one (see chain-geometry's half curve faces).
+      const far = lay === 'outside' ? { x: 0, z: -1 } : { x: 0, z: 1 }
+      const directions = [{ x: -1, z: 0 }, far, { x: 1, z: 0 }]
+      const outer = width / 2
+      const inner = outer - shape.seatDepthMm
+      const band = shape.seatDepthMm * BACK_SHARE
+      const seatRadius = shape.back === 'outside' ? inner + (shape.seatDepthMm - band) / 2 : shape.back === 'inside' ? inner + band + (shape.seatDepthMm - band) / 2 : inner + shape.seatDepthMm / 2
+      return {
+        body: (
+          <>
+            <path className="mcf-plan-unit" d={ringPath(centre, inner, outer, directions)} />
+            {shape.back === 'outside' ? <path className="mcf-plan-back" d={ringPath(centre, outer - band, outer, directions)} /> : null}
+            {shape.back === 'inside' ? <path className="mcf-plan-back" d={ringPath(centre, inner, inner + band, directions)} /> : null}
+          </>
+        ),
+        numberAt: { x: centre.x + seatRadius * far.x, z: centre.z + seatRadius * far.z },
       }
     }
     case 'round-end':

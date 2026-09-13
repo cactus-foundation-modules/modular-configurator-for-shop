@@ -40,13 +40,28 @@ export function newPieceFor(value: AdminOptionValue): PieceConfig {
 
 /**
  * A unit given a new shape, with its sizes kept sensible for it: a curve's
- * footprint is a square as big as the curve, and its seat fits inside that.
+ * footprint is a square as big as the curve, a half curve's is as wide as the
+ * ring and half as deep, and the seat fits inside either. Moving between the two
+ * keeps the ring the same size.
  */
 function withShape(piece: PieceConfig, shape: PieceConfig['shape']): PieceConfig {
-  if (shape.kind !== 'curve') return { ...piece, shape }
-  const size = Math.max(piece.widthMm, piece.depthMm)
-  const seatDepthMm = Math.min(shape.seatDepthMm, size - 50)
-  return { ...piece, widthMm: size, depthMm: size, shape: { ...shape, seatDepthMm } }
+  const was = piece.shape.kind
+  if (shape.kind === 'curve') {
+    const size = was === 'half-curve' ? piece.depthMm : Math.max(piece.widthMm, piece.depthMm)
+    const seatDepthMm = Math.min(shape.seatDepthMm, size - 50)
+    return { ...piece, widthMm: size, depthMm: size, shape: { ...shape, seatDepthMm } }
+  }
+  if (shape.kind === 'half-curve') {
+    const width = was === 'curve' ? piece.widthMm * 2 : piece.widthMm >= piece.depthMm ? piece.widthMm : piece.depthMm * 2
+    const seatDepthMm = Math.min(shape.seatDepthMm, Math.round(width / 2) - 50)
+    return halfCurveSized({ ...piece, shape: { ...shape, seatDepthMm } }, width)
+  }
+  return { ...piece, shape }
+}
+
+/** A half curve `width` across, so half as deep. */
+function halfCurveSized(piece: PieceConfig, width: number): PieceConfig {
+  return { ...piece, widthMm: width, depthMm: Math.round(width / 2) }
 }
 
 /**
@@ -85,7 +100,7 @@ function MillimetreInput({ label, value, onCommit }: { label: string; value: num
 }
 
 function curveBack(piece: PieceConfig): 'outside' | 'inside' | 'none' {
-  return piece.shape.kind === 'curve' ? piece.shape.back : 'outside'
+  return piece.shape.kind === 'curve' || piece.shape.kind === 'half-curve' ? piece.shape.back : 'outside'
 }
 
 /** What the sizes mean for this kind of unit, in the owner's words. */
@@ -93,6 +108,8 @@ function shapeHint(piece: PieceConfig): string {
   switch (piece.shape.kind) {
     case 'curve':
       return 'A quarter of a circle. Its size is the width (and depth) of the whole curve from the outside; its seat depth is how deep each cut end is, which should match the units it joins.'
+    case 'half-curve':
+      return 'Half of a circle. Its width is the whole curve from one outside end to the other; its seat depth is how deep each cut end is, which should match the units it joins. Its depth follows, at half the width.'
     case 'round-end':
       return 'Width is the flat side, which joins two rows sat back to back. Depth is how far the rounded part sticks out.'
     default:
@@ -150,6 +167,15 @@ export function PieceSetupRow({ value, piece, onChange }: PieceSetupRowProps) {
                 onCommit={(seatDepthMm) => onChange({ ...piece, shape: { kind: 'curve', back: curveBack(piece), seatDepthMm } })}
               />
             </>
+          ) : piece.shape.kind === 'half-curve' ? (
+            <>
+              <MillimetreInput label="Width of the half curve (mm)" value={piece.widthMm} onCommit={(width) => onChange(halfCurveSized(piece, width))} />
+              <MillimetreInput
+                label="Seat depth (mm)"
+                value={piece.shape.seatDepthMm}
+                onCommit={(seatDepthMm) => onChange({ ...piece, shape: { kind: 'half-curve', back: curveBack(piece), seatDepthMm } })}
+              />
+            </>
           ) : (
             <>
               <MillimetreInput label="Width (mm)" value={piece.widthMm} onCommit={(widthMm) => onChange({ ...piece, widthMm })} />
@@ -178,7 +204,11 @@ export function PieceSetupRow({ value, piece, onChange }: PieceSetupRowProps) {
               type="button"
               style={buttonStyle}
               onClick={() =>
-                onChange({ ...piece, widthMm: value.suggestedWidthMm ?? piece.widthMm, depthMm: value.suggestedDepthMm ?? piece.depthMm })
+                onChange(
+                  piece.shape.kind === 'half-curve'
+                    ? halfCurveSized(piece, value.suggestedWidthMm ?? piece.widthMm)
+                    : { ...piece, widthMm: value.suggestedWidthMm ?? piece.widthMm, depthMm: value.suggestedDepthMm ?? piece.depthMm },
+                )
               }
             >
               Use the specification ({value.suggestedWidthMm} × {value.suggestedDepthMm} mm)

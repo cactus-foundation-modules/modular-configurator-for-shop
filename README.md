@@ -37,15 +37,18 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
    - pick the option whose values are the units;
    - tick each unit and say how it joins - no arms (with or without a back), arm on the
      left, arm on the right, arms both sides, a corner with its second back on the left or
-     right, a quarter-circle curve with its back outside, inside or no back at all, or a
-     rounded end that wraps one row round to the row behind it - always as seen from the
-     front; its footprint in millimetres (a curve's size and seat depth); and how its 3D
+     right, a quarter-circle or half-circle curve with its back outside, inside or no back at
+     all, or a rounded end that wraps one row round to the row behind it - always as seen from
+     the front; its footprint in millimetres (a curve's size and seat depth; a half curve's
+     width across the whole ring, its depth following at half that); and how its 3D
      model is turned. Leave that on **Work it out from each model**: supplier files face
      every which way, often differently from one variation to the next, and the builder
      turns each file to match the shape it was told the unit is (`lib/model-orientation.ts`);
    - optionally write ready-made layouts. With none, shoppers are offered a pair, a row
-     of three, an L, a U, a booth, a round island and a capsule island, built from the
-     units ticked, wherever the range can make them.
+     of three, an L, a U, a horseshoe, a booth, a round booth, a round island and a capsule
+     island, built from the units ticked, wherever the range can make them. Backless units
+     and curves are never suggested, so a range made only of those (stools, say) needs its
+     ready-made layouts written here.
 
 ## Linking a ready-made set to the builder
 
@@ -80,6 +83,11 @@ product photographs show them). So:
 - a curve with its back outside turns towards the seats' front too (three make a booth),
   one with its back inside turns away from it (four make a round island), and one with no
   back goes whichever way fits - the shopper can turn it round from its panel;
+- a half curve is two of those turns at once: both its cut ends lie on its straight side,
+  so the chain comes back the way it went. With its back outside the rows either side face
+  each other across its hole (a horseshoe; two make a round booth); with its back inside
+  they sit back to back with the hole between them (two make a round island); with no back
+  it goes whichever way fits, like a backless curve;
 - a rounded end joins the end of one row to the end of the row behind it, back to back,
   so two rounded ends and two rows make a capsule island. A layout that joins up all the
   way round has no ends left to add to.

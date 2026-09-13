@@ -14,7 +14,7 @@
 // well the turned model matches: footprint proportions, covered area, and tall
 // parts in the right places. Pure - no three.js - so it is tested directly and
 // the browser only has to hand it triangles.
-import { curveCentre, curveLayOf, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { curveCentre, curveLayOf, halfCurveCentre, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 
 /**
  * The stored model turn meaning "work it out from each file". Declared here, not
@@ -140,6 +140,22 @@ function templateAt(definition: PieceDefinition, flipped: boolean, x: number, z:
         covered &&
         shape.back !== 'none' &&
         (lay === 'outside' ? radius >= width - backBand : radius <= inner + backBand)
+      return { covered, tall }
+    }
+    case 'half-curve': {
+      const lay = curveLayOf(shape.back, flipped)
+      const centre = halfCurveCentre(depth, lay)
+      const radius = Math.hypot(x - centre.x, z - centre.z)
+      const outer = width / 2
+      const inner = outer - shape.seatDepthMm
+      // Laid the outside way the ring's far side is towards -z; the inside way, towards +z.
+      const farSide = lay === 'outside' ? z <= centre.z : z >= centre.z
+      const covered = farSide && radius >= inner && radius <= outer
+      const backBand = shape.seatDepthMm * CURVE_BACK_SHARE
+      const tall =
+        covered &&
+        shape.back !== 'none' &&
+        (lay === 'outside' ? radius >= outer - backBand : radius <= inner + backBand)
       return { covered, tall }
     }
     case 'round-end': {

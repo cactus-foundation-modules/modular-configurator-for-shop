@@ -54,12 +54,20 @@ export function validateConfigAgainstOptions(
 
 /**
  * Sizes a shape cannot have. A curve is a quarter ring, so its footprint is a
- * square as big as the ring, and its seat has to fit inside that.
+ * square as big as the ring, and its seat has to fit inside that. A half curve
+ * is half a ring, as wide as the ring and half as deep (a millimetre either way,
+ * for an odd width), and its seat has to fit inside the radius.
  */
 export function pieceSizeProblem(piece: PieceConfig): string | null {
-  if (piece.shape.kind !== 'curve') return null
-  if (piece.widthMm !== piece.depthMm) return 'is curved, so its width and depth are both the size of the curve and must match'
-  if (piece.shape.seatDepthMm >= piece.widthMm) return 'has a seat deeper than the curve it sits in'
+  const { shape } = piece
+  if (shape.kind === 'curve') {
+    if (piece.widthMm !== piece.depthMm) return 'is curved, so its width and depth are both the size of the curve and must match'
+    if (shape.seatDepthMm >= piece.widthMm) return 'has a seat deeper than the curve it sits in'
+  }
+  if (shape.kind === 'half-curve') {
+    if (Math.abs(piece.depthMm * 2 - piece.widthMm) > 1) return 'is a half curve, so its depth must be half its width'
+    if (shape.seatDepthMm * 2 >= piece.widthMm) return 'has a seat deeper than the curve it sits in'
+  }
   return null
 }
 

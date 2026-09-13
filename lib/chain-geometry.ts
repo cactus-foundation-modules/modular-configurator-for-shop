@@ -35,6 +35,16 @@
  *   back outside -> ring centre at (-w/2, +w/2): enter left, leave front
  *   back inside  -> ring centre at (-w/2, -w/2): enter left, leave back
  *
+ * A half curve is half a ring, `widthMm` wide (its outer diameter) and `depthMm`
+ * deep (its outer radius). Both cut ends lie on its straight side, one each end,
+ * with the hole between them, so it sends the chain back the way it came. Laid
+ * the outside way the straight side is its front and the rows it joins face each
+ * other across the hole (the seats face in); laid the inside way the straight
+ * side is its back and the rows sit back to back with the hole between them.
+ *   back outside -> ring centre at (0, +d/2): enter left end, leave right end, both facing +z
+ *   back inside  -> ring centre at (0, -d/2): enter left end, leave right end, both facing -z
+ * Like a quarter curve, one with no back is laid the inside way when flipped.
+ *
  * A rounded end joins the end of one row to the end of the row behind it, back
  * to back: its flat side (`widthMm`) runs along z = -depth/2 and is two faces
  * sharing their back corner in its middle. Walking in through the left half and
@@ -75,6 +85,12 @@ export type PieceShape =
       seatDepthMm: number
     }
   | {
+      kind: 'half-curve'
+      back: CurveBack
+      /** Length of each cut end, from the back of the seat to its front. */
+      seatDepthMm: number
+    }
+  | {
       kind: 'round-end'
     }
 
@@ -94,7 +110,7 @@ export interface ChainEntry {
   /** Unique within the layout; survives reordering so animations can track it. */
   entryId: string
   pieceId: string
-  /** A reversible piece (a curve with no back) laid the other way round. */
+  /** A reversible piece (a curve or half curve with no back) laid the other way round. */
   flipped?: boolean
 }
 
@@ -196,9 +212,10 @@ function cornerFrontFace(widthMm: number, depthMm: number, backSide: CornerBackS
     : { backCorner: { x: widthMm / 2, z: depthMm / 2 }, outward: { x: 0, z: 1 }, towardsFront: { x: -1, z: 0 } }
 }
 
-/** True for a piece that can be laid either way round (a curve with no back). */
+/** True for a piece that can be laid either way round (a curve or half curve with no back). */
 export function isReversible(definition: PieceDefinition): boolean {
-  return definition.shape.kind === 'curve' && definition.shape.back === 'none'
+  const { shape } = definition
+  return (shape.kind === 'curve' || shape.kind === 'half-curve') && shape.back === 'none'
 }
 
 /** Which way round a curve is laid: a backless one follows its entry's flip. */
@@ -226,6 +243,26 @@ function curveExitFace(widthMm: number, seatDepthMm: number, lay: 'outside' | 'i
     : { backCorner: { x: -widthMm / 2 + innerRadius, z: -widthMm / 2 }, outward: { x: 0, z: -1 }, towardsFront: { x: 1, z: 0 } }
 }
 
+/** Centre of a half curve's ring in its own frame: the middle of its straight side. */
+export function halfCurveCentre(depthMm: number, lay: 'outside' | 'inside'): FloorVector {
+  return { x: 0, z: lay === 'outside' ? depthMm / 2 : -depthMm / 2 }
+}
+
+/**
+ * One cut end of a half curve, on its straight side. The back corner is the end
+ * of the cut nearest the backrest: its outer end laid the outside way, its inner
+ * end laid the inside way.
+ */
+function halfCurveFace(widthMm: number, depthMm: number, seatDepthMm: number, lay: 'outside' | 'inside', side: 'left' | 'right'): JoinFace {
+  const outerRadius = widthMm / 2
+  const innerRadius = outerRadius - seatDepthMm
+  const sign = side === 'left' ? -1 : 1
+  if (lay === 'outside') {
+    return { backCorner: { x: sign * outerRadius, z: depthMm / 2 }, outward: { x: 0, z: 1 }, towardsFront: { x: -sign, z: 0 } }
+  }
+  return { backCorner: { x: sign * innerRadius, z: -depthMm / 2 }, outward: { x: 0, z: -1 }, towardsFront: { x: sign, z: 0 } }
+}
+
 /** One half of a rounded end's flat side; both halves meet in its middle. */
 function roundEndFace(depthMm: number, towardsLeft: boolean): JoinFace {
   return { backCorner: { x: 0, z: -depthMm / 2 }, outward: { x: 0, z: -1 }, towardsFront: { x: towardsLeft ? -1 : 1, z: 0 } }
@@ -241,6 +278,8 @@ function entryFaceOf(definition: PieceDefinition, flipped: boolean | undefined):
       return shape.backSide === 'left' ? cornerFrontFace(widthMm, depthMm, 'left') : leftFace(widthMm, depthMm)
     case 'curve':
       return curveEntryFace(widthMm, shape.seatDepthMm, curveLayOf(shape.back, flipped))
+    case 'half-curve':
+      return halfCurveFace(widthMm, depthMm, shape.seatDepthMm, curveLayOf(shape.back, flipped), 'left')
     case 'round-end':
       return roundEndFace(depthMm, true)
   }
@@ -256,6 +295,8 @@ function exitFaceOf(definition: PieceDefinition, flipped: boolean | undefined): 
       return shape.backSide === 'left' ? rightFace(widthMm, depthMm) : cornerFrontFace(widthMm, depthMm, 'right')
     case 'curve':
       return curveExitFace(widthMm, shape.seatDepthMm, curveLayOf(shape.back, flipped))
+    case 'half-curve':
+      return halfCurveFace(widthMm, depthMm, shape.seatDepthMm, curveLayOf(shape.back, flipped), 'right')
     case 'round-end':
       return roundEndFace(depthMm, false)
   }
@@ -416,7 +457,7 @@ export function pointOnPiece(pose: PiecePose, local: FloorVector): FloorVector {
   return { x: roundMillimetre(rotated.x + pose.centre.x), z: roundMillimetre(rotated.z + pose.centre.z) }
 }
 
-/** Straight sides each quarter of a curve, or half of a rounded end, is drawn with. */
+/** Straight sides each quarter of a curve or half curve, or half of a rounded end, is drawn with. */
 const ARC_SEGMENTS = 12
 
 /** The direction a share `share` (0..1) of the way round a quarter turn from `from` to `to`. */
@@ -428,7 +469,7 @@ function quarterWay(from: FloorVector, to: FloorVector, share: number): FloorVec
 /**
  * A piece's floor shape, in its own frame, as convex polygons that together
  * cover it: one rectangle for a straight or corner unit, thin wedges round a
- * curve, a fan across a rounded end. Arcs are drawn with short straight sides,
+ * curve or half curve, a fan across a rounded end. Arcs are drawn with short straight sides,
  * which cut inside the true outline by a millimetre or two at most.
  */
 function outlineOf(definition: PieceDefinition, flipped: boolean | undefined): FloorVector[][] {
@@ -451,6 +492,25 @@ function outlineOf(definition: PieceDefinition, flipped: boolean | undefined): F
         const end = quarterWay(from, to, share)
         return [at(inner, start), at(width, start), at(width, end), at(inner, end)]
       })
+    }
+    case 'half-curve': {
+      const lay = curveLayOf(shape.back, flipped)
+      const centre = halfCurveCentre(depth, lay)
+      const outer = width / 2
+      const inner = outer - shape.seatDepthMm
+      // From the left cut end round through the far side of the ring to the right one.
+      const left = { x: -1, z: 0 }
+      const far = lay === 'outside' ? { x: 0, z: -1 } : { x: 0, z: 1 }
+      const right = { x: 1, z: 0 }
+      const at = (radius: number, direction: FloorVector) => ({ x: centre.x + radius * direction.x, z: centre.z + radius * direction.z })
+      const quarters: ReadonlyArray<readonly [FloorVector, FloorVector]> = [[left, far], [far, right]]
+      return quarters.flatMap(([from, to]) =>
+        steps.slice(1).map((share, index) => {
+          const start = quarterWay(from, to, steps[index] ?? 0)
+          const end = quarterWay(from, to, share)
+          return [at(inner, start), at(outer, start), at(outer, end), at(inner, end)]
+        }),
+      )
     }
     case 'round-end': {
       const middle = { x: 0, z: -depth / 2 }

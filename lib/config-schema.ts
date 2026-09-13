@@ -33,6 +33,13 @@ const CurveShapeSchema = z.object({
   seatDepthMm: z.number().int().min(50).max(MAX_UNIT_SIDE_MM),
 })
 
+/** Half a ring: `widthMm` is its outer diameter, `depthMm` its outer radius. */
+const HalfCurveShapeSchema = z.object({
+  kind: z.literal('half-curve'),
+  back: z.enum(['outside', 'inside', 'none']),
+  seatDepthMm: z.number().int().min(50).max(MAX_UNIT_SIDE_MM),
+})
+
 const RoundEndShapeSchema = z.object({
   kind: z.literal('round-end'),
 })
@@ -41,6 +48,7 @@ export const PieceShapeSchema = z.discriminatedUnion('kind', [
   StraightShapeSchema,
   CornerShapeSchema,
   CurveShapeSchema,
+  HalfCurveShapeSchema,
   RoundEndShapeSchema,
 ])
 

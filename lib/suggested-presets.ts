@@ -8,28 +8,33 @@ import { findChainProblem, type ChainLimits } from '@/modules/modular-configurat
 import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { StorefrontPreset } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 
-type Role = 'leftEnd' | 'middle' | 'rightEnd' | 'corner' | 'curveIn' | 'curveOut' | 'roundEnd'
+type Role = 'leftEnd' | 'middle' | 'rightEnd' | 'corner' | 'curveIn' | 'curveOut' | 'halfCurveIn' | 'halfCurveOut' | 'roundEnd'
 
 interface ShapeRecipe {
   name: string
   roles: Role[]
 }
 
-// Smallest first, so a shopper scanning the row sees the ladder climb.
+// Smallest first, so a shopper scanning the row sees the ladder climb. A name
+// that appears twice is the same shape made two ways: the first the range can
+// build is offered, and the second is not.
 const RECIPES: readonly ShapeRecipe[] = [
   { name: 'Pair', roles: ['leftEnd', 'rightEnd'] },
   { name: 'Row of three', roles: ['leftEnd', 'middle', 'rightEnd'] },
   { name: 'L-shape', roles: ['leftEnd', 'middle', 'corner', 'middle', 'rightEnd'] },
   { name: 'U-shape', roles: ['leftEnd', 'corner', 'middle', 'corner', 'rightEnd'] },
+  { name: 'Horseshoe', roles: ['leftEnd', 'middle', 'halfCurveIn', 'middle', 'rightEnd'] },
   { name: 'Booth', roles: ['curveIn', 'curveIn', 'curveIn'] },
+  { name: 'Round booth', roles: ['halfCurveIn', 'halfCurveIn'] },
   { name: 'Round island', roles: ['curveOut', 'curveOut', 'curveOut', 'curveOut'] },
+  { name: 'Round island', roles: ['halfCurveOut', 'halfCurveOut'] },
   { name: 'Capsule island', roles: ['roundEnd', 'middle', 'middle', 'roundEnd', 'middle', 'middle'] },
 ]
 
 /**
  * A curve with its back on the outside seats people facing IN (a booth); one
- * with its back inside seats them facing OUT (an island). A curve with no back
- * is left out: which way round it goes is the shopper's to decide.
+ * with its back inside seats them facing OUT (an island). Half curves the same.
+ * A curve with no back is left out: which way round it goes is the shopper's to decide.
  */
 function roleOf(definition: PieceDefinition): Role | null {
   const { shape } = definition
@@ -38,6 +43,8 @@ function roleOf(definition: PieceDefinition): Role | null {
       return 'corner'
     case 'curve':
       return shape.back === 'outside' ? 'curveIn' : shape.back === 'inside' ? 'curveOut' : null
+    case 'half-curve':
+      return shape.back === 'outside' ? 'halfCurveIn' : shape.back === 'inside' ? 'halfCurveOut' : null
     case 'round-end':
       return 'roundEnd'
     case 'straight':
@@ -64,6 +71,7 @@ export function suggestPresets(definitions: readonly PieceDefinition[], limits: 
   const definitionsById = new Map(definitions.map((definition) => [definition.pieceId, definition]))
   const presets: StorefrontPreset[] = []
   for (const recipe of RECIPES) {
+    if (presets.some((preset) => preset.name === recipe.name)) continue
     const pieceIds = pieceIdsForRecipe(recipe, firstByRole)
     if (!pieceIds) continue
     const chain = pieceIds.map((pieceId, index) => ({ entryId: `preset-${index}`, pieceId }))

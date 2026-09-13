@@ -95,6 +95,25 @@ describe('working out which way a model faces', () => {
     expect(orientModel(grid, either, true).quarterTurns).toBe(2)
   })
 
+  it('turns a half curve so its ring lies behind its straight side, or in front when laid the inside way', () => {
+    // Half a ring centred on the file's origin, its far side towards +z.
+    const band = ringBand(0, 0, 0.49, 1.2, 0, Math.PI, 0.46)
+    const half = (back: 'outside' | 'inside' | 'none'): PieceDefinition => ({
+      pieceId: 'half',
+      shape: { kind: 'half-curve', back, seatDepthMm: 710 },
+      widthMm: 2400,
+      depthMm: 1200,
+    })
+    // rotation.y = PI takes the file's +z to -z, where the outside way has its far side.
+    expect(orientModel(gridOf([band]), half('none'), false).quarterTurns).toBe(2)
+    expect(orientModel(gridOf([band]), half('none'), true).quarterTurns).toBe(0)
+    // A back standing round the outer rim reads as a back on the outside.
+    const backed = gridOf([ringBand(0, 0, 0.49, 0.99, 0, Math.PI, 0.45), ringBand(0, 0, 0.99, 1.2, 0, Math.PI, 1.16)])
+    const asOutside = orientModel(backed, half('outside'), false)
+    expect(asOutside.quarterTurns).toBe(2)
+    expect(asOutside.margin).toBeGreaterThan(0.1)
+  })
+
   it('puts a rounded end’s flat side against the rows it joins', () => {
     // A half disc with its flat side along the file's +x edge.
     const grid = gridOf([ringBand(0.71, 0.71, 0, 0.71, QUARTER, 3 * QUARTER, 0.46)])

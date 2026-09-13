@@ -57,6 +57,22 @@ describe('the set-up screen’s unit shapes', () => {
     ).toEqual(['curve-back-outside', 'curve-back-inside', 'curve-backless', 'round-end', 'middle-backless'])
   })
 
+  it('guesses a half curve from a 180 degree or half curve name', () => {
+    expect(['180 Degree Curved Unit', '180° Backless Curve', 'Half Curve Inner'].map(guessShapeFromLabel)).toEqual([
+      'half-curve-back-outside',
+      'half-curve-backless',
+      'half-curve-back-inside',
+    ])
+  })
+
+  it('keeps a curve’s seat depth when it changes to a half curve', () => {
+    expect(shapeFromChoice('half-curve-backless', { kind: 'curve', back: 'outside', seatDepthMm: 450 })).toEqual({
+      kind: 'half-curve',
+      back: 'none',
+      seatDepthMm: 450,
+    })
+  })
+
   it('keeps a curve’s seat depth when it changes to another kind of curve', () => {
     expect(shapeFromChoice('curve-backless', { kind: 'curve', back: 'outside', seatDepthMm: 710 })).toEqual({
       kind: 'curve',
@@ -111,6 +127,33 @@ describe('checking a set-up before it is saved', () => {
     expect(validateConfigAgainstOptions({ enabled: true, config: curved(700, 700, 710) }, [UNIT_OPTION])).toBe(
       'Corner Unit has a seat deeper than the curve it sits in',
     )
+  })
+})
+
+describe('checking a half curve’s sizes', () => {
+  const halved = (widthMm: number, depthMm: number, seatDepthMm: number): ConfiguratorConfig => ({
+    ...CONFIG,
+    presets: [],
+    pieces: [{ valueSlug: 'corner-unit', shape: { kind: 'half-curve', back: 'none', seatDepthMm }, widthMm, depthMm, modelTurnDegrees: 'auto' }],
+  })
+
+  it('accepts half as deep as wide, to the millimetre for an odd width', () => {
+    expect(validateConfigAgainstOptions({ enabled: true, config: halved(1890, 945, 450) }, [UNIT_OPTION])).toBeNull()
+    expect(validateConfigAgainstOptions({ enabled: true, config: halved(1885, 943, 450) }, [UNIT_OPTION])).toBeNull()
+  })
+
+  it('refuses a half curve whose sizes cannot be half of a circle', () => {
+    expect(validateConfigAgainstOptions({ enabled: true, config: halved(1890, 1890, 450) }, [UNIT_OPTION])).toBe(
+      'Corner Unit is a half curve, so its depth must be half its width',
+    )
+    expect(validateConfigAgainstOptions({ enabled: true, config: halved(1890, 945, 945) }, [UNIT_OPTION])).toBe(
+      'Corner Unit has a seat deeper than the curve it sits in',
+    )
+  })
+
+  it('reads a stored set-up from before half curves unchanged', () => {
+    expect(parseStoredConfig(CONFIG)).toEqual(CONFIG)
+    expect(parseStoredConfig(halved(1890, 945, 450)).pieces[0]?.shape).toEqual({ kind: 'half-curve', back: 'none', seatDepthMm: 450 })
   })
 })
 

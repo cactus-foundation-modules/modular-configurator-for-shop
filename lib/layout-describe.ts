@@ -31,28 +31,38 @@ export function layoutShapeLabel(shape: LayoutShape): string {
 }
 
 /**
- * Which way each piece turns the chain: +1 towards the seats' front (a corner, a
- * curve with its back outside), -1 away from it (a curve with its back inside),
- * 0 for a piece that carries straight on.
+ * How many quarter turns each piece makes, and which way: positive towards the
+ * seats' front (a corner, a curve with its back outside), negative away from it
+ * (a curve with its back inside), 0 for a piece that carries straight on. A half
+ * curve is two quarter turns at once.
  */
 function quarterTurnOf(piece: PlacedPiece): number {
   const { shape } = piece.definition
   if (shape.kind === 'corner') return 1
   if (shape.kind === 'curve') return curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 1 : -1
+  if (shape.kind === 'half-curve') return curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 2 : -2
   return 0
+}
+
+/** A rounded end, or a half curve laid the inside way, sits the rows either side of it back to back. */
+function joinsRowsBackToBack(piece: PlacedPiece): boolean {
+  const { shape } = piece.definition
+  if (shape.kind === 'round-end') return true
+  return shape.kind === 'half-curve' && curveLayOf(shape.back, piece.entry.flipped) === 'inside'
 }
 
 /**
  * A layout that joins up all the way round is an island; one with a rounded
- * end has rows back to back; one bending both ways is a serpentine. Otherwise
- * it is named by how many quarter turns it makes, curves counting as corners.
+ * end (or a half curve laid the inside way) has rows back to back; one bending
+ * both ways is a serpentine. Otherwise it is named by how many quarter turns it
+ * makes, curves counting as corners and a half curve as two.
  */
 export function shapeOfPlaced(placed: readonly PlacedPiece[]): LayoutShape {
   if (layoutIsClosed(placed)) return 'island'
-  if (placed.some((piece) => piece.definition.shape.kind === 'round-end')) return 'back-to-back'
+  if (placed.some(joinsRowsBackToBack)) return 'back-to-back'
   const turns = placed.map(quarterTurnOf).filter((turn) => turn !== 0)
   if (turns.some((turn) => turn > 0) && turns.some((turn) => turn < 0)) return 'serpentine'
-  return layoutShapeOf(turns.length)
+  return layoutShapeOf(turns.reduce((total, turn) => total + Math.abs(turn), 0))
 }
 
 /** "1.84 m" - metres to two places, the way a tape measure would be read out. */

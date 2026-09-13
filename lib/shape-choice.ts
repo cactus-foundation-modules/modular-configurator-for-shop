@@ -14,6 +14,9 @@ export type ShapeChoice =
   | 'curve-back-outside'
   | 'curve-back-inside'
   | 'curve-backless'
+  | 'half-curve-back-outside'
+  | 'half-curve-back-inside'
+  | 'half-curve-backless'
   | 'round-end'
 
 export const SHAPE_CHOICES: ReadonlyArray<{ value: ShapeChoice; label: string }> = [
@@ -27,6 +30,9 @@ export const SHAPE_CHOICES: ReadonlyArray<{ value: ShapeChoice; label: string }>
   { value: 'curve-back-outside', label: 'Curve - back on the outside, seats face in' },
   { value: 'curve-back-inside', label: 'Curve - back on the inside, seats face out' },
   { value: 'curve-backless', label: 'Curve - no back, bends either way' },
+  { value: 'half-curve-back-outside', label: 'Half curve - back on the outside, seats face in' },
+  { value: 'half-curve-back-inside', label: 'Half curve - back on the inside, seats face out' },
+  { value: 'half-curve-backless', label: 'Half curve - no back, bends either way' },
   { value: 'round-end', label: 'Rounded end - wraps round to the row behind' },
 ]
 
@@ -35,10 +41,11 @@ export const DEFAULT_CURVE_SEAT_DEPTH_MM = 700
 
 /**
  * The shape a choice stands for. A curve keeps the seat depth it already had,
- * so flicking between the three kinds of curve does not lose what was typed.
+ * so flicking between the kinds of curve and half curve does not lose what was typed.
  */
 export function shapeFromChoice(choice: ShapeChoice, previous?: PieceShapeConfig): PieceShapeConfig {
-  const seatDepthMm = previous?.kind === 'curve' ? previous.seatDepthMm : DEFAULT_CURVE_SEAT_DEPTH_MM
+  const seatDepthMm =
+    previous?.kind === 'curve' || previous?.kind === 'half-curve' ? previous.seatDepthMm : DEFAULT_CURVE_SEAT_DEPTH_MM
   switch (choice) {
     case 'middle':
       return { kind: 'straight', closedLeft: false, closedRight: false }
@@ -60,6 +67,12 @@ export function shapeFromChoice(choice: ShapeChoice, previous?: PieceShapeConfig
       return { kind: 'curve', back: 'inside', seatDepthMm }
     case 'curve-backless':
       return { kind: 'curve', back: 'none', seatDepthMm }
+    case 'half-curve-back-outside':
+      return { kind: 'half-curve', back: 'outside', seatDepthMm }
+    case 'half-curve-back-inside':
+      return { kind: 'half-curve', back: 'inside', seatDepthMm }
+    case 'half-curve-backless':
+      return { kind: 'half-curve', back: 'none', seatDepthMm }
     case 'round-end':
       return { kind: 'round-end' }
   }
@@ -71,6 +84,8 @@ export function choiceFromShape(shape: PieceShapeConfig): ShapeChoice {
       return shape.backSide === 'left' ? 'corner-back-left' : 'corner-back-right'
     case 'curve':
       return shape.back === 'outside' ? 'curve-back-outside' : shape.back === 'inside' ? 'curve-back-inside' : 'curve-backless'
+    case 'half-curve':
+      return shape.back === 'outside' ? 'half-curve-back-outside' : shape.back === 'inside' ? 'half-curve-back-inside' : 'half-curve-backless'
     case 'round-end':
       return 'round-end'
     case 'straight':
@@ -86,15 +101,17 @@ export function choiceFromShape(shape: PieceShapeConfig): ShapeChoice {
  * has just ticked - they see it and can change it before saving. Curves and
  * rounded ends are checked first, then corners: a "left corner" is a corner,
  * not the left end of a row. "Inner" and "outer" curves are guessed as the back
- * being on that side, which is how the ranges seen so far name them.
+ * being on that side, which is how the ranges seen so far name them. A curve
+ * called 180 degrees, or half, is a half curve.
  */
 export function guessShapeFromLabel(label: string): ShapeChoice {
   const name = label.toLowerCase()
   const backless = /\bbackless\b|\bno back\b/.test(name)
   if (/\bcurve[ds]?\b|\bcurved\b|\bradius\b/.test(name)) {
-    if (backless) return 'curve-backless'
-    if (/\binner\b|\binside\b/.test(name)) return 'curve-back-inside'
-    return 'curve-back-outside'
+    const half = /\b180\b|\bhalf\b|\bsemi/.test(name)
+    if (backless) return half ? 'half-curve-backless' : 'curve-backless'
+    if (/\binner\b|\binside\b/.test(name)) return half ? 'half-curve-back-inside' : 'curve-back-inside'
+    return half ? 'half-curve-back-outside' : 'curve-back-outside'
   }
   if (/\bd[- ]end\b|\brounded end\b|\bhalf[- ]round\b|\bsemi[- ]?circular\b/.test(name)) return 'round-end'
   if (name.includes('corner')) return 'corner-back-left'

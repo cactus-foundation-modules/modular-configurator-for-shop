@@ -17,7 +17,7 @@ import { fetchBundle } from '@/modules/product-3d-views-for-shop/lib/fabric-fetc
 import { applyFabricPaint, disposeModel, loadModel } from '@/modules/product-3d-views-for-shop/lib/three/load-model'
 import type { FabricBundle } from '@/modules/product-3d-views-for-shop/lib/types'
 import type { StorefrontPiece } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
-import { curveCentre, curveLayOf, isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { curveCentre, curveLayOf, halfCurveCentre, isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { AUTOMATIC_MODEL_TURN, orientModel, rasteriseTops } from '@/modules/modular-configurator-for-shop/lib/model-orientation'
 
 export interface UnitModelRequest {
@@ -137,8 +137,10 @@ async function modelTurnFor(model: Object3D, piece: StorefrontPiece, flipped: bo
   const setting = piece.modelTurnDegrees
   if (setting !== AUTOMATIC_MODEL_TURN) {
     // The owner's turn is for the unit laid its usual way; laid the other way a
-    // curve's frame is a quarter turn round (see chain-geometry's curve faces).
-    const layTurn = isReversible(piece.definition) && flipped ? -Math.PI / 2 : 0
+    // curve's frame is a quarter turn round, a half curve's a half turn (see
+    // chain-geometry's curve faces).
+    const halfTurn = piece.definition.shape.kind === 'half-curve'
+    const layTurn = isReversible(piece.definition) && flipped ? (halfTurn ? Math.PI : -Math.PI / 2) : 0
     // Clockwise seen from above, which is a negative turn about three's y axis.
     return (-setting * Math.PI) / 180 + layTurn
   }
@@ -256,6 +258,27 @@ async function buildPlaceholder(piece: StorefrontPiece, flipped: boolean, colour
         const outline = new three.Shape()
         outline.absarc(centreX, -centreZ, outerRadius, from, 0, lay === 'outside')
         outline.absarc(centreX, -centreZ, innerRadius, 0, from, lay !== 'outside')
+        outline.closePath()
+        return outline
+      }
+      extruded(ring(inner, outer), 0, BLOCK_SEAT_HEIGHT)
+      if (shape.back === 'outside') extruded(ring(outer - BLOCK_PANEL, outer), BLOCK_SEAT_HEIGHT, BLOCK_BACK_HEIGHT)
+      if (shape.back === 'inside') extruded(ring(inner, inner + BLOCK_PANEL), BLOCK_SEAT_HEIGHT, BLOCK_BACK_HEIGHT)
+      break
+    }
+    case 'half-curve': {
+      const lay = curveLayOf(shape.back, flipped)
+      const centreZ = halfCurveCentre(piece.definition.depthMm, lay).z / MILLIMETRES_PER_METRE
+      const outer = width / 2
+      const inner = outer - shape.seatDepthMm / MILLIMETRES_PER_METRE
+      // Half the ring, as angles in the outline's (x, -z) plane: from the left cut
+      // end round the far side (+PI/2 laid the outside way, -PI/2 the inside way)
+      // to the right cut end.
+      const clockwise = lay === 'outside'
+      const ring = (innerRadius: number, outerRadius: number) => {
+        const outline = new three.Shape()
+        outline.absarc(0, -centreZ, outerRadius, Math.PI, 0, clockwise)
+        outline.absarc(0, -centreZ, innerRadius, 0, Math.PI, !clockwise)
         outline.closePath()
         return outline
       }
