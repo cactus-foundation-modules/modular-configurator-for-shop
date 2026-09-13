@@ -202,6 +202,12 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
   }, [storefront.slug, snapshot])
   useEffect(() => () => publishLayoutStage(storefront.slug, null), [storefront.slug])
 
+  // The layout a reset just cleared, if there is one to go back to. The Undo
+  // button lives in the workspace, so without this a reset that lands on the
+  // shapes would throw a twelve-unit layout away for good.
+  const clearedLayout = builder.history[builder.history.length - 1]
+  const canReturnToLayout = isEmpty && (clearedLayout?.chain.length ?? 0) > 0
+
   if (!started || !payload || !view || !snapshot) {
     return (
       <PresetStart
@@ -209,6 +215,10 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         labelFor={labelFor}
         presets={presets}
         pricesInText={pricesInText}
+        onBackToLayout={canReturnToLayout ? () => {
+          setStatusText(null)
+          dispatch({ type: 'undo' })
+        } : undefined}
         onStartPreset={(key) => {
           const preset = storefront.presets[Number(key)]
           if (!preset) return
@@ -253,7 +263,12 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       onResetLayout={() => {
         setPickerEnd(null)
         setStatusText(null)
-        setDesigningOwn(true)
+        // Back to the shapes, the same place "Reset options" goes: a shopper who
+        // clears a layout is starting again, and starting again is where the
+        // ready-made shapes are offered. Only a product with no shapes to offer
+        // goes straight to an empty builder, where "Design your own" would be the
+        // only tile on the screen.
+        setDesigningOwn(storefront.presets.length === 0)
         dispatch({ type: 'clear' })
       }}
       onAddToBasket={addToBasket}

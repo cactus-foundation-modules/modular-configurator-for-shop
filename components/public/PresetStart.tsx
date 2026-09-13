@@ -23,12 +23,22 @@ interface PresetStartProps {
   pricesInText: string
   onStartPreset: (key: string) => void
   onDesignOwn: () => void
+  // Offered after a reset, to put back the layout it cleared. Absent on a fresh
+  // start and in the page editor's preview, which then render exactly as before.
+  onBackToLayout?: () => void
 }
 
-export function PresetStart({ intro, labelFor, presets, pricesInText, onStartPreset, onDesignOwn }: PresetStartProps) {
+export function PresetStart({ intro, labelFor, presets, pricesInText, onStartPreset, onDesignOwn, onBackToLayout }: PresetStartProps) {
   return (
     <div className="mcf-start">
       {intro ? <p className="mcf-card-intro">{intro}</p> : null}
+      {onBackToLayout ? (
+        <div className="mcf-row">
+          <button type="button" className="mcf-link-button" onClick={onBackToLayout}>
+            Back to your layout
+          </button>
+        </div>
+      ) : null}
       <div className="mcf-presets">
         {presets.map((preset) => (
           <button key={preset.key} type="button" className="mcf-preset" onClick={() => onStartPreset(preset.key)}>
