@@ -132,6 +132,49 @@ function nearestMadeCombination(
   return best?.combination ?? null
 }
 
+/**
+ * Whether a unit comes in `valueId` of `optionId` at all: some switched-on
+ * variation of it carries that value and every other choice the unit made for
+ * itself. The layout's own choices do not count against it - a unit not made in
+ * one of those simply takes the nearest it is made in.
+ */
+export function unitIsMadeIn(
+  payload: VariantSelectorPayload,
+  pieceOptionId: string,
+  pieceId: string,
+  optionId: string,
+  valueId: string,
+  ownChoices: OptionSelection,
+): boolean {
+  const required = [
+    pieceId,
+    valueId,
+    ...Object.entries(ownChoices).flatMap(([ownOptionId, ownValueId]) =>
+      ownOptionId === optionId || ownOptionId === pieceOptionId || !ownValueId ? [] : [ownValueId],
+    ),
+  ]
+  return payload.variants.some((variant) => variant.enabled && required.every((id) => variant.optionValueIds.includes(id)))
+}
+
+/**
+ * Whether choosing `valueId` for the whole layout reaches any unit: at least one
+ * unit that follows the layout on this option comes in it. A value no unit comes
+ * in would change nothing, so it is offered crossed out. With every unit choosing
+ * for itself, the layout's choice changes nothing either way and is never refused.
+ */
+export function layoutValueReachesAUnit(
+  payload: VariantSelectorPayload,
+  pieceOptionId: string,
+  chain: readonly ChainEntry[],
+  unitChoices: Readonly<Record<string, OptionSelection>>,
+  optionId: string,
+  valueId: string,
+): boolean {
+  const followers = chain.filter((entry) => !unitChoices[entry.entryId]?.[optionId])
+  if (followers.length === 0) return true
+  return followers.some((entry) => unitIsMadeIn(payload, pieceOptionId, entry.pieceId, optionId, valueId, unitChoices[entry.entryId] ?? {}))
+}
+
 function compareRanks(first: readonly number[], second: readonly number[]): number {
   for (let index = 0; index < first.length; index += 1) {
     const difference = (first[index] ?? 0) - (second[index] ?? 0)

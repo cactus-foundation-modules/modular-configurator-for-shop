@@ -23,6 +23,8 @@ interface UnitEditorProps {
   adjustedOptionIds: readonly string[]
   /** Lays the unit the other way round; only for a unit that can be. */
   onFlip?: () => void
+  /** Whether this unit comes in a value at all, keeping its other choices. */
+  isMadeIn: (optionId: string, valueId: string) => boolean
   onSwap: (pieceId: string) => void
   onChoose: (optionId: string, valueId: string | null) => void
   onRemove: () => void
@@ -39,6 +41,7 @@ export function UnitEditor({
   madeIn,
   adjustedOptionIds,
   onFlip,
+  isMadeIn,
   onSwap,
   onChoose,
   onRemove,
@@ -85,6 +88,7 @@ export function UnitEditor({
               labelId={labelId}
               value={own}
               onChange={(valueId) => onChoose(option.id, valueId || null)}
+              unavailableNote="not made in this combination"
               options={[
                 {
                   value: '',
@@ -93,7 +97,12 @@ export function UnitEditor({
                     : `Same as the layout${layoutValue ? ` (${layoutValue.label})` : ''}`,
                   swatch: layoutValue ? swatchOf(layoutValue) : null,
                 },
-                ...option.values.map((value) => ({ value: value.id, label: value.label, swatch: swatchOf(value) })),
+                ...option.values.map((value) => ({
+                  value: value.id,
+                  label: value.label,
+                  swatch: swatchOf(value),
+                  unavailable: !isMadeIn(option.id, value.id),
+                })),
               ]}
             />
           </div>

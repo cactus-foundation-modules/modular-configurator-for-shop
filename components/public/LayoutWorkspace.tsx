@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatMoney } from '@/modules/shop/lib/money'
 import { swapOptions } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
-import { priceLayout } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
+import { layoutValueReachesAUnit, priceLayout, unitIsMadeIn } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { refusalSentence, unitProblemSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
 import type { ConfiguratorStorefrontPayload } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import type { OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
@@ -108,11 +108,10 @@ export function LayoutWorkspace({
   const priceOfPieceAlone = (pieceId: string): number | null =>
     priceLayout(payload, storefront.pieceOptionId, [{ entryId: 'probe', pieceId }], layoutChoices, {}).units[0]?.variant?.price ?? null
 
-  const layoutValueProblem = (optionId: string, valueId: string): string | null => {
-    if (draft.chain.length === 0) return null
-    const trial = priceLayout(payload, storefront.pieceOptionId, draft.chain, { ...layoutChoices, [optionId]: valueId }, draft.unitChoices)
-    return trial.units.some((unit) => unit.problem === 'unavailable') ? 'not made for every unit in this layout' : null
-  }
+  const layoutValueProblem = (optionId: string, valueId: string): string | null =>
+    layoutValueReachesAUnit(payload, storefront.pieceOptionId, draft.chain, draft.unitChoices, optionId, valueId)
+      ? null
+      : 'not made for any unit in this layout'
 
   const isEmpty = draft.chain.length === 0
 
@@ -248,6 +247,7 @@ export function LayoutWorkspace({
                         madeIn={unit.selection}
                         adjustedOptionIds={unit.adjustedOptionIds}
                         onFlip={definition && isReversible(definition) ? () => dispatch({ type: 'flip', entryId: unit.entry.entryId }) : undefined}
+                        isMadeIn={(optionId, valueId) => unitIsMadeIn(payload, storefront.pieceOptionId, unit.entry.pieceId, optionId, valueId, own)}
                         onSwap={(pieceId) => dispatch({ type: 'swap', entryId: unit.entry.entryId, pieceId })}
                         onChoose={(optionId, valueId) => dispatch({ type: 'set-unit-choice', entryId: unit.entry.entryId, optionId, valueId })}
                         onRemove={() => dispatch({ type: 'remove', entryId: unit.entry.entryId })}

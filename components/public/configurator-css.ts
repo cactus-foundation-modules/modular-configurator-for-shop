@@ -87,6 +87,7 @@ export const CONFIGURATOR_CSS = `
 .mcf-chip:hover{border-color:var(--color-primary);background:var(--color-primary-subtle)}
 .mcf-chip[aria-pressed="true"]{border-color:var(--color-primary);background:var(--color-primary);color:var(--color-on-primary)}
 .mcf-chip:disabled{opacity:.5;cursor:not-allowed}
+.mcf-chip[data-unavailable="true"]{text-decoration:line-through}
 .mcf-icon-button{display:inline-grid;place-items:center;width:2.25rem;height:2.25rem;border:1px solid var(--color-border);border-radius:var(--radius-md,8px);background:var(--color-surface);color:var(--color-text);font:inherit;font-size:1.125rem;cursor:pointer}
 .mcf-icon-button:hover{border-color:var(--color-primary);background:var(--color-primary-subtle)}
 .mcf-icon-button:disabled{opacity:.45;cursor:not-allowed}
@@ -124,6 +125,8 @@ export const CONFIGURATOR_CSS = `
 .mcf-swatch:hover{border-color:var(--color-primary)}
 .mcf-swatch[aria-pressed="true"]{border-color:var(--color-primary);box-shadow:0 0 0 2px var(--color-surface),0 0 0 4px var(--color-primary)}
 .mcf-swatch:disabled{opacity:.4;cursor:not-allowed}
+.mcf-swatch[data-unavailable="true"]::after{content:"";position:absolute;inset:0;background:linear-gradient(to top right,transparent calc(50% - 2.5px),var(--color-surface) calc(50% - 2.5px),var(--color-surface) calc(50% - 1px),var(--color-text) calc(50% - 1px),var(--color-text) calc(50% + 1px),var(--color-surface) calc(50% + 1px),var(--color-surface) calc(50% + 2.5px),transparent calc(50% + 2.5px));pointer-events:none}
+.mcf-visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .mcf-swatch-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 .mcf-peek-wrap{position:relative;display:inline-flex}
 .mcf-peek{position:absolute;bottom:calc(100% + 6px);left:50%;z-index:20;display:grid;justify-items:center;gap:4px;padding:4px;transform:translateX(-50%);border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);color:var(--color-text);box-shadow:var(--shadow-lg);font-size:var(--text-xs,.75rem);white-space:nowrap;pointer-events:none}
@@ -144,6 +147,8 @@ export const CONFIGURATOR_CSS = `
 .mcf-sselect-option{display:flex;align-items:center;gap:.5rem;min-height:2.5rem;padding:.3rem .5rem;border-radius:var(--radius-sm,6px);color:var(--color-text);font-size:.8125rem;cursor:pointer}
 .mcf-sselect-option[data-active="true"]{background:var(--color-primary-subtle)}
 .mcf-sselect-option[aria-selected="true"]{font-weight:600}
+.mcf-sselect-option[aria-disabled="true"]{color:var(--color-text-muted);cursor:not-allowed}
+.mcf-sselect-option[aria-disabled="true"] .mcf-sselect-label,.mcf-sselect-button[data-unavailable="true"] .mcf-sselect-label{text-decoration:line-through}
 .mcf-picker{display:grid;gap:.5rem;padding:.75rem;border:1px solid var(--color-primary);border-radius:var(--radius-md,8px);background:var(--color-surface);box-shadow:var(--shadow-elevated)}
 .mcf-picker-list{display:grid;gap:.375rem;margin:0;padding:0;list-style:none}
 .mcf-picker-option{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;align-items:center;width:100%;min-height:2.75rem;padding:.5rem .625rem;border:1px solid var(--color-border);border-radius:var(--radius-md,8px);background:var(--color-bg);color:var(--color-text);font:inherit;text-align:left;cursor:pointer}

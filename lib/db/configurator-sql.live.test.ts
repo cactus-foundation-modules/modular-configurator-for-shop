@@ -100,6 +100,7 @@ function moduleSql(moduleName: string): string[] {
 }
 
 const PARENT_ID = 'mcf-parent'
+const SET_ID = 'mcf-set'
 const UNITS = [
   { slug: 'left-unit', label: 'Left Unit', width: '79cm' },
   { slug: 'central-unit', label: 'Central Unit', width: '66cm' },
@@ -119,6 +120,9 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
     configs: typeof import('@/modules/modular-configurator-for-shop/lib/db/configs')
     specSizes: typeof import('@/modules/modular-configurator-for-shop/lib/db/spec-sizes')
     adminPayload: typeof import('@/modules/modular-configurator-for-shop/lib/admin-payload')
+    layoutLinks: typeof import('@/modules/modular-configurator-for-shop/lib/db/layout-links')
+    linkAdminPayload: typeof import('@/modules/modular-configurator-for-shop/lib/layout-link-admin-payload')
+    linkStorefront: typeof import('@/modules/modular-configurator-for-shop/lib/layout-link-storefront')
   }
   let modules: Modules
   let vps: typeof import('@/lib/backup/vps-database')
@@ -137,6 +141,9 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
       configs: await import('@/modules/modular-configurator-for-shop/lib/db/configs'),
       specSizes: await import('@/modules/modular-configurator-for-shop/lib/db/spec-sizes'),
       adminPayload: await import('@/modules/modular-configurator-for-shop/lib/admin-payload'),
+      layoutLinks: await import('@/modules/modular-configurator-for-shop/lib/db/layout-links'),
+      linkAdminPayload: await import('@/modules/modular-configurator-for-shop/lib/layout-link-admin-payload'),
+      linkStorefront: await import('@/modules/modular-configurator-for-shop/lib/layout-link-storefront'),
     }
     const { prisma } = modules.prisma
 
@@ -191,7 +198,7 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
       await modules.prisma.prisma.$executeRawUnsafe(statement)
     }
     const rows = await modules.prisma.prisma.$queryRaw<Array<{ present: boolean }>>`
-      SELECT to_regclass('public.mcf_product_configs') IS NOT NULL AS present
+      SELECT to_regclass('public.mcf_product_configs') IS NOT NULL AND to_regclass('public.mcf_layout_links') IS NOT NULL AS present
     `
     expect(rows[0]?.present).toBe(true)
   })
@@ -239,8 +246,64 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
     ])
   })
 
+  it('saves, reads back, lists targets for and removes a link to the builder', async () => {
+    const { configs, layoutLinks, linkAdminPayload, linkStorefront } = modules
+    const { prisma } = modules.prisma
+    await prisma.$executeRawUnsafe(`INSERT INTO "shp_products" ("id", "name", "slug", "type", "status", "price") VALUES ('${SET_ID}', 'Seating Set', 'seating-set', 'PHYSICAL', 'ACTIVE', 0)`)
+    await prisma.$executeRawUnsafe(`INSERT INTO "svr_options" ("id", "product_id", "name") VALUES ('opt-seats', '${SET_ID}', 'Seats')`)
+    await prisma.$executeRawUnsafe(`INSERT INTO "svr_option_values" ("id", "option_id", "label", "slug", "position") VALUES ('v-two', 'opt-seats', '2 Seater', '2-seater', 0)`)
+    await configs.saveProductConfigurator(PARENT_ID, true, {
+      pieceOptionName: 'Unit',
+      maxPieces: 8,
+      pieces: [
+        { valueSlug: 'left-unit', shape: { kind: 'straight', closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760, modelTurnDegrees: 'auto' },
+        { valueSlug: 'central-unit', shape: { kind: 'straight', closedLeft: false, closedRight: false }, widthMm: 660, depthMm: 760, modelTurnDegrees: 'auto' },
+      ],
+      presets: [],
+    })
+
+    expect(await layoutLinks.getLayoutLink(SET_ID)).toBeNull()
+    expect(await layoutLinks.listBuilderProducts()).toEqual([{ productId: PARENT_ID, name: 'Modular Seating', slug: 'modular-seating' }])
+
+    const link = {
+      targetProductId: PARENT_ID,
+      leadText: "Fancy a 'bespoke' one?",
+      linkText: 'Build it',
+      newTab: true,
+      startingLayouts: [
+        { when: null, valueSlugs: ['left-unit', 'central-unit'] },
+        { when: { optionName: 'Seats', valueSlug: '2-seater' }, valueSlugs: ['left-unit'] },
+      ],
+    }
+    await layoutLinks.saveLayoutLink(SET_ID, link)
+    expect(await layoutLinks.getLayoutLink(SET_ID)).toEqual(link)
+    await layoutLinks.saveLayoutLink(SET_ID, { ...link, newTab: false, startingLayouts: [] })
+    expect(await layoutLinks.getLayoutLink(SET_ID)).toEqual({ ...link, newTab: false, startingLayouts: [] })
+    await layoutLinks.saveLayoutLink(SET_ID, link)
+
+    const admin = await linkAdminPayload.loadLayoutLinkAdminPayload(SET_ID)
+    expect(admin.ownOptions).toEqual([{ name: 'Seats', values: [{ slug: '2-seater', label: '2 Seater' }] }])
+    expect(admin.builders.map((builder) => [builder.productId, builder.units.map((unit) => unit.slug)])).toEqual([[PARENT_ID, ['left-unit', 'central-unit']]])
+
+    const block = await linkStorefront.loadLayoutLinkBlockData('seating-set')
+    expect(block?.targetHref).toMatch(/\/modular-seating$/)
+    expect(block?.startingLayouts).toEqual(link.startingLayouts)
+    expect(block?.targetOptions).toEqual([])
+
+    const builder = await configs.getProductConfigurator(PARENT_ID)
+    if (!builder) throw new Error('The builder set-up saved above has gone')
+    await configs.saveProductConfigurator(PARENT_ID, false, builder.config)
+    expect(await linkStorefront.loadLayoutLinkBlockData('seating-set')).toBeNull()
+
+    await layoutLinks.deleteLayoutLink(SET_ID)
+    expect(await layoutLinks.getLayoutLink(SET_ID)).toBeNull()
+    await layoutLinks.saveLayoutLink(SET_ID, link)
+  })
+
   it('goes when its product goes', async () => {
     await modules.prisma.prisma.$executeRawUnsafe(`DELETE FROM "shp_products" WHERE "id" = '${PARENT_ID}'`)
     expect(await modules.configs.getProductConfigurator(PARENT_ID)).toBeNull()
+    // A link to a builder that no longer exists goes with it.
+    expect(await modules.layoutLinks.getLayoutLink(SET_ID)).toBeNull()
   })
 })

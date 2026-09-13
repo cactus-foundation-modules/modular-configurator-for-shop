@@ -47,6 +47,26 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
      of three, an L, a U, a booth, a round island and a capsule island, built from the
      units ticked, wherever the range can make them.
 
+## Linking a ready-made set to the builder
+
+A product that is not built from units itself - a ready-made set made from the range - can
+carry a line under its short description sending shoppers to the product with the builder:
+
+1. Put the **Shop: Build your own layout link (modular products)** block in the product page
+   layout, straight after the short description. It renders nothing on products without a link.
+2. On the set's edit screen, open **Layout builder** -> **Link to a layout builder on another
+   product**: pick the builder product, the words before the link and the link itself, whether
+   it opens in a new tab, and optionally **starting layouts** - units from the builder product,
+   each used "whatever is chosen" or when one of the set's own choices is picked (an 8 or a 10
+   seater, a left or right arm).
+
+The address follows the shopper (`lib/layout-link.ts`): the first starting layout their choices
+meet, else the unconditional one, written as `?modular-layout=`; plus each choice the builder
+product also offers - same option name and value, or else the one option holding that value
+slug ("Back Height: High Back" -> `back=high-back`) - as its own shop-variations parameter, so
+the builder opens on the same fabric. The line hides itself when the builder product is
+archived, hidden or has its builder switched off.
+
 ## How a layout goes together
 
 A layout is a chain. Walking it from first unit to last is walking each straight run
@@ -120,6 +140,10 @@ The add-ons box keeps working exactly as it does on any product. Two things to k
 `enabled`, and `config` jsonb (see `lib/config-schema.ts`). Options are referred to by
 name and values by slug, never by id, so a catalogue re-import leaves the set-up intact.
 
+`mcf_layout_links` - one row per product linking to a builder: `product_id` (PK, FK cascade),
+`target_product_id` (FK cascade), `lead_text`, `link_text`, `new_tab`, `starting_layouts` jsonb
+(see `lib/layout-link-schema.ts`), options by name and values by slug.
+
 Basket lines carry `meta.modularLayout` (`lib/line-meta.ts`): the layout id, role,
 listing, shape, unit and line counts, arrangement and link code, all size-capped.
 
@@ -132,9 +156,10 @@ listing, shape, unit and line counts, arrangement and link code, all size-capped
 | `shop.cart-line-resolver` | `lib/line-resolver#resolveLayoutLineMeta` |
 | `shop.cart-line-resolver-prefetch` | `lib/line-resolver#prefetchLayoutLines` |
 
-Puck block `ShopModularConfigurator` on the `shopProductDetail` layout type. Admin API:
-`GET` / `PUT /api/m/modular-configurator-for-shop/admin/products/[productId]`
-(`shop.products`).
+Puck blocks `ShopModularConfigurator` and `ShopModularLayoutLink` on the `shopProductDetail`
+layout type. Admin API (`shop.products`):
+`GET` / `PUT /api/m/modular-configurator-for-shop/admin/products/[productId]` and
+`GET` / `PUT /api/m/modular-configurator-for-shop/admin/products/[productId]/layout-link`.
 
 ## Tests
 

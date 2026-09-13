@@ -8,7 +8,7 @@ import {
   footprintOfLayout,
   layoutShapeOf,
 } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
-import { fromPriceOfPiece, priceLayout } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
+import { fromPriceOfPiece, layoutValueReachesAUnit, priceLayout, unitIsMadeIn } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { placeChain, type ChainEntry } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import {
   CENTRAL,
@@ -88,6 +88,33 @@ describe('describing a layout', () => {
   })
 })
 
+/** Backed units come in a high or low back; the corner only in a standard one. */
+function backHeightRange() {
+  const unit = { ...UNIT_OPTION, id: 'o-unit', values: [
+    { ...UNIT_OPTION.values[0]!, id: 'u-central' },
+    { ...UNIT_OPTION.values[0]!, id: 'u-corner' },
+  ] }
+  const back = { ...FRAME_OPTION, id: 'o-back', values: [
+    { ...FRAME_OPTION.values[0]!, id: 'b-high', position: 0 },
+    { ...FRAME_OPTION.values[0]!, id: 'b-low', position: 1 },
+    { ...FRAME_OPTION.values[0]!, id: 'b-standard', position: 2 },
+  ] }
+  const madeIn = (unitId: string, backId: string, inStock = true) => ({
+    ...SEATING_PAYLOAD.variants[0]!,
+    id: `${unitId}-${backId}`,
+    childProductId: `child-${unitId}-${backId}`,
+    optionValueIds: [unitId, backId],
+    price: 100,
+    inStock,
+  })
+  const payload = {
+    ...SEATING_PAYLOAD,
+    options: [unit, back],
+    variants: [madeIn('u-central', 'b-high'), madeIn('u-central', 'b-low'), madeIn('u-corner', 'b-standard')],
+  }
+  return payload
+}
+
 describe('pricing a layout', () => {
   const layoutChoices = { 'opt-fabric': 'v-synergy', 'opt-frame': 'v-black' }
 
@@ -116,29 +143,7 @@ describe('pricing a layout', () => {
   })
 
   it('matches a unit not made in the layout’s choice to the nearest combination it is made in', () => {
-    // Backed units come in a high or low back; the corner only in a standard one.
-    const unit = { ...UNIT_OPTION, id: 'o-unit', values: [
-      { ...UNIT_OPTION.values[0]!, id: 'u-central' },
-      { ...UNIT_OPTION.values[0]!, id: 'u-corner' },
-    ] }
-    const back = { ...FRAME_OPTION, id: 'o-back', values: [
-      { ...FRAME_OPTION.values[0]!, id: 'b-high', position: 0 },
-      { ...FRAME_OPTION.values[0]!, id: 'b-low', position: 1 },
-      { ...FRAME_OPTION.values[0]!, id: 'b-standard', position: 2 },
-    ] }
-    const madeIn = (unitId: string, backId: string, inStock = true) => ({
-      ...SEATING_PAYLOAD.variants[0]!,
-      id: `${unitId}-${backId}`,
-      childProductId: `child-${unitId}-${backId}`,
-      optionValueIds: [unitId, backId],
-      price: 100,
-      inStock,
-    })
-    const payload = {
-      ...SEATING_PAYLOAD,
-      options: [unit, back],
-      variants: [madeIn('u-central', 'b-high'), madeIn('u-central', 'b-low'), madeIn('u-corner', 'b-standard')],
-    }
+    const payload = backHeightRange()
     const layout = chainOf('u-central', 'u-corner')
 
     const inStandard = priceLayout(payload, 'o-unit', layout, { 'o-back': 'b-standard' }, {})
@@ -157,6 +162,18 @@ describe('pricing a layout', () => {
     const impossible = priceLayout(payload, 'o-unit', layout, { 'o-back': 'b-standard' }, { e1: { 'o-back': 'b-high' } })
     expect(impossible.units[1]?.problem).toBe('unavailable')
     expect(impossible.buyable).toBe(false)
+  })
+
+  it('knows which choices a unit comes in at all, and which layout choices reach no unit', () => {
+    const payload = backHeightRange()
+    expect(['b-high', 'b-low', 'b-standard'].map((back) => unitIsMadeIn(payload, 'o-unit', 'u-central', 'o-back', back, {}))).toEqual([true, true, false])
+    // Its own back is what is being asked about, so it does not rule the others out.
+    expect(unitIsMadeIn(payload, 'o-unit', 'u-central', 'o-back', 'b-low', { 'o-back': 'b-high' })).toBe(true)
+    const corners = chainOf('u-corner', 'u-corner')
+    expect(layoutValueReachesAUnit(payload, 'o-unit', corners, {}, 'o-back', 'b-high')).toBe(false)
+    expect(layoutValueReachesAUnit(payload, 'o-unit', chainOf('u-corner', 'u-central'), {}, 'o-back', 'b-high')).toBe(true)
+    // Every unit choosing its own back: the layout's choice changes nothing, so nothing is refused.
+    expect(layoutValueReachesAUnit(payload, 'o-unit', corners, { e0: { 'o-back': 'b-standard' }, e1: { 'o-back': 'b-standard' } }, 'o-back', 'b-high')).toBe(true)
   })
 
   it('quotes each unit from its cheapest combination', () => {

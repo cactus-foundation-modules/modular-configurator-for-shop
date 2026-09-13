@@ -31,7 +31,7 @@ function definitionsBySlug(pieces: readonly PieceConfig[]): Map<string, PieceDef
   )
 }
 
-function PresetPreview({ slugs, definitions, labelBySlug, maxPieces }: {
+export function PresetPreview({ slugs, definitions, labelBySlug, maxPieces }: {
   slugs: readonly string[]
   definitions: ReadonlyMap<string, PieceDefinition>
   labelBySlug: ReadonlyMap<string, string>

@@ -1,6 +1,6 @@
 {
   "name": "modular-configurator-for-shop",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "tablePrefix": "mcf_",
   "description": "Let shoppers build a layout from a modular product's units in 3D - sofas, bench seating, anything that joins end to end and turns corners - and buy the whole arrangement in one go",
   "requiresCoreVersion": "0.5.1605",
@@ -59,9 +59,20 @@
       "layoutTypes": [
         "shopProductDetail"
       ]
+    },
+    {
+      "type": "ShopModularLayoutLink",
+      "import": "./components/puck/ShopModularLayoutLink",
+      "component": "shopModularLayoutLinkPuckComponent",
+      "rscComponent": "shopModularLayoutLinkPuckRscComponent",
+      "rscImport": "./components/puck/ShopModularLayoutLink.rsc",
+      "layoutTypes": [
+        "shopProductDetail"
+      ]
     }
   ],
   "teardown": [
+    "mcf_layout_links",
     "mcf_product_configs"
   ]
 }

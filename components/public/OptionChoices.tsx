@@ -31,6 +31,7 @@ export function OptionChoices({ option, chosenValueId, onChoose, unavailableReas
               className="mcf-swatch"
               style={swatch ? swatchStyle(swatch) : undefined}
               aria-pressed={chosen}
+              data-unavailable={reason !== null}
               disabled={reason !== null && !chosen}
               onClick={() => onChoose(value.id)}
             >
@@ -43,11 +44,13 @@ export function OptionChoices({ option, chosenValueId, onChoose, unavailableReas
             type="button"
             className="mcf-chip"
             aria-pressed={chosen}
+            data-unavailable={reason !== null}
             disabled={reason !== null && !chosen}
             title={reason ?? undefined}
             onClick={() => onChoose(value.id)}
           >
             {value.label}
+            {reason ? <span className="mcf-visually-hidden">, {reason}</span> : null}
           </button>
         )
       })}

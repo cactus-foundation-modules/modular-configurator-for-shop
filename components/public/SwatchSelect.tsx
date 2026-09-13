@@ -9,6 +9,10 @@
 // picking, and typing a letter jumps to the next option starting with it. Focus
 // stays on the button throughout; the active option is announced through
 // aria-activedescendant, as the pattern prescribes.
+//
+// An unavailable option stays in the list, crossed out and marked aria-disabled,
+// so the shopper can see it exists and a screen reader can reach it and hear why
+// - but picking it, by click or by key, does nothing.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { swatchStyle } from '@/modules/modular-configurator-for-shop/components/public/swatch-style'
 
@@ -17,6 +21,8 @@ export interface SwatchSelectOption {
   value: string
   label: string
   swatch: string | null
+  /** Shown crossed out and cannot be picked. */
+  unavailable?: boolean
 }
 
 interface SwatchSelectProps {
@@ -24,13 +30,15 @@ interface SwatchSelectProps {
   options: readonly SwatchSelectOption[]
   value: string
   onChange: (value: string) => void
+  /** Read aloud after an unavailable option's name, e.g. "not made in this combination". */
+  unavailableNote: string
 }
 
 function Swatch({ swatch }: { swatch: string | null }) {
   return <span className="mcf-sselect-swatch" style={swatch ? swatchStyle(swatch) : undefined} aria-hidden="true" />
 }
 
-export function SwatchSelect({ labelId, options, value, onChange }: SwatchSelectProps) {
+export function SwatchSelect({ labelId, options, value, onChange, unavailableNote }: SwatchSelectProps) {
   const baseId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
@@ -63,7 +71,9 @@ export function SwatchSelect({ labelId, options, value, onChange }: SwatchSelect
   }
   const pick = (index: number) => {
     const option = options[index]
-    if (option) onChange(option.value)
+    // Refused without closing, so the shopper is left looking at what they can have.
+    if (!option || option.unavailable) return
+    onChange(option.value)
     setOpen(false)
   }
 
@@ -130,11 +140,13 @@ export function SwatchSelect({ labelId, options, value, onChange }: SwatchSelect
         aria-expanded={open}
         aria-controls={listId}
         aria-activedescendant={open ? `${baseId}-option-${activeIndex}` : undefined}
+        data-unavailable={selected?.unavailable === true}
         onClick={() => (open ? setOpen(false) : openAt(selectedIndex))}
         onKeyDown={onKeyDown}
       >
         {showSwatches ? <Swatch swatch={selected?.swatch ?? null} /> : null}
         <span className="mcf-sselect-label">{selected?.label ?? ''}</span>
+        {selected?.unavailable ? <span className="mcf-visually-hidden">, {unavailableNote}</span> : null}
         <span className="mcf-sselect-caret" aria-hidden="true" />
       </button>
       <ul id={listId} ref={listRef} role="listbox" aria-labelledby={labelId} className="mcf-sselect-list" hidden={!open}>
@@ -145,6 +157,7 @@ export function SwatchSelect({ labelId, options, value, onChange }: SwatchSelect
             role="option"
             data-index={index}
             aria-selected={index === selectedIndex}
+            aria-disabled={option.unavailable ? true : undefined}
             data-active={index === activeIndex}
             className="mcf-sselect-option"
             onPointerEnter={() => setActiveIndex(index)}
@@ -152,6 +165,7 @@ export function SwatchSelect({ labelId, options, value, onChange }: SwatchSelect
           >
             {showSwatches ? <Swatch swatch={option.swatch} /> : null}
             <span className="mcf-sselect-label">{option.label}</span>
+            {option.unavailable ? <span className="mcf-visually-hidden">, {unavailableNote}</span> : null}
           </li>
         ))}
       </ul>
