@@ -21,4 +21,5 @@ export const modularLayoutGalleryProvider: ShopGalleryMediaProvider = {
   },
   Thumbs: GalleryLayoutThumbs,
   Stage: GalleryLayoutStage,
+  mobileStage: 'immersive',
 }

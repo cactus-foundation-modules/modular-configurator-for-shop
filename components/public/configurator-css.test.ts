@@ -7,4 +7,8 @@ describe('modular configurator storefront styles', () => {
     expect(CONFIGURATOR_CSS).toContain('top:var(--spd-header-h,96px)')
     expect(CONFIGURATOR_CSS).not.toContain('--spd-tabnav-h')
   })
+
+  it('drops the layout summary box from the pinned fallback view', () => {
+    expect(CONFIGURATOR_CSS).toContain('.mcf-sticky-view.svr-mstick .mcf-stage-caption{display:none}')
+  })
 })
