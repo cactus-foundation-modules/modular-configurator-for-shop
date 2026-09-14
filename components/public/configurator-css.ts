@@ -16,6 +16,9 @@ export const CONFIGURATOR_CSS = `
 .mcf-tab-panel[hidden],.mcf-stage-view[hidden],.mcf-sselect-list[hidden]{display:none!important}
 .mcf-start{display:grid;gap:.75rem;color:var(--color-text)}
 .mcf-workspace{display:grid;gap:1rem;color:var(--color-text)}
+.mcf-controls{display:grid;gap:1rem;min-width:0}
+.mcf-sticky-view.svr-mstick{position:fixed;z-index:30;top:var(--spd-header-h,96px);margin:0;background:var(--color-page-bg,var(--color-bg));padding:8px 0;border-bottom:1px solid var(--color-border)}
+.mcf-sticky-view.svr-mstick .mcf-stage{aspect-ratio:16/9;max-height:none}
 .mcf-stage{position:relative;width:100%;aspect-ratio:4/3;max-height:34rem;border:1px solid var(--color-border);border-radius:var(--radius-lg,12px);background:var(--color-bg-subtle);overflow:hidden}
 .mcf-stage--fill{position:absolute;inset:0;aspect-ratio:auto;max-height:none;border:0;border-radius:0}
 .mcf-stage--fill .mcf-stage-tools{justify-content:flex-end}

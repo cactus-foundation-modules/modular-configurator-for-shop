@@ -30,6 +30,7 @@ import { useLayoutDelivery } from '@/modules/modular-configurator-for-shop/compo
 import { deliveryLinesFor } from '@/modules/modular-configurator-for-shop/lib/layout-delivery'
 import type { useLayoutBuilder } from '@/modules/modular-configurator-for-shop/components/public/use-layout-builder'
 import { otherOptionsOf, pieceLookup, type LayoutView } from '@/modules/modular-configurator-for-shop/components/public/use-layout-view'
+import { OPTIONS_AREA_CLASS, useStickyMobileGallery } from '@/modules/shop-variations/lib/use-sticky-mobile-gallery'
 
 type LayoutBuilderState = ReturnType<typeof useLayoutBuilder>
 
@@ -84,6 +85,7 @@ export function LayoutWorkspace({
   const [deliveryChoice, setDeliveryChoice] = useState<string | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const unitEditorRef = useRef<HTMLDivElement>(null)
+  const { colRef: stickyViewRef, spacerRef: stickyViewSpacerRef } = useStickyMobileGallery(!viewInGallery)
 
   const { draft, selectedEntryId, refusal, dispatch, canUndo } = builder
   const pieceById = useMemo(() => pieceLookup(storefront.pieces), [storefront.pieces])
@@ -139,66 +141,74 @@ export function LayoutWorkspace({
 
   return (
     <div className="mcf-workspace">
-      {viewInGallery ? null : <LayoutStageView snapshot={snapshot} fill={false} />}
-
-      {refusal ? (
-        <div className="mcf-notice" role="status">
-          <span>{refusalSentence(refusal, storefront.maxPieces)}</span>
-          <button type="button" className="mcf-link-button" onClick={() => dispatch({ type: 'dismiss-refusal' })}>
-            OK
-          </button>
-        </div>
-      ) : null}
-
-      {pickerView && openEnd ? (
-        <div ref={pickerRef}>
-        <PiecePicker
-          heading={isEmpty ? 'Choose your first unit' : `Add a unit ${pickerView.besideText}`}
-          candidates={pickerView.candidates}
-          labelFor={labelFor}
-          priceFor={priceOfPieceAlone}
-          currencySymbol={currencySymbol}
-          maxPieces={storefront.maxPieces}
-          onPick={(pieceId) => {
-            dispatch({ type: 'add', end: openEnd, pieceId })
-            onClosePicker()
-          }}
-          onCancel={isEmpty ? undefined : onClosePicker}
-        />
-        </div>
-      ) : null}
-
-      <section className="mcf-section" aria-labelledby="mcf-your-layout">
-        <div className="mcf-section-head">
-          <h3 id="mcf-your-layout" className="mcf-section-title">
-            Your layout
-          </h3>
-          <div className="mcf-row">
-            <button type="button" className="mcf-link-button" disabled={!canUndo} onClick={() => dispatch({ type: 'undo' })}>
-              Undo
-            </button>
-            {!isEmpty ? (
-              <button type="button" className="mcf-link-button" onClick={onResetLayout}>
-                Reset layout
-              </button>
-            ) : null}
+      {viewInGallery ? null : (
+        <>
+          <div ref={stickyViewRef} className="mcf-sticky-view">
+            <LayoutStageView snapshot={snapshot} fill={false} />
           </div>
-        </div>
-        {snapshot.ghosts.length > 0 && !isEmpty ? (
-          <div className="mcf-row">
-            {snapshot.ghosts.map((ghost) => (
-              <button
-                key={ghost.end}
-                type="button"
-                className="mcf-chip"
-                aria-pressed={pickerEnd === ghost.end}
-                onClick={() => onOpenPicker(ghost.end)}
-              >
-                + {ghost.label}
-              </button>
-            ))}
+          <div ref={stickyViewSpacerRef} aria-hidden style={{ display: 'none' }} />
+        </>
+      )}
+
+      <div className={`mcf-controls ${OPTIONS_AREA_CLASS}`}>
+        {refusal ? (
+          <div className="mcf-notice" role="status">
+            <span>{refusalSentence(refusal, storefront.maxPieces)}</span>
+            <button type="button" className="mcf-link-button" onClick={() => dispatch({ type: 'dismiss-refusal' })}>
+              OK
+            </button>
           </div>
         ) : null}
+
+        {pickerView && openEnd ? (
+          <div ref={pickerRef}>
+            <PiecePicker
+              heading={isEmpty ? 'Choose your first unit' : `Add a unit ${pickerView.besideText}`}
+              candidates={pickerView.candidates}
+              labelFor={labelFor}
+              priceFor={priceOfPieceAlone}
+              currencySymbol={currencySymbol}
+              maxPieces={storefront.maxPieces}
+              onPick={(pieceId) => {
+                dispatch({ type: 'add', end: openEnd, pieceId })
+                onClosePicker()
+              }}
+              onCancel={isEmpty ? undefined : onClosePicker}
+            />
+          </div>
+        ) : null}
+
+        <section className="mcf-section" aria-labelledby="mcf-your-layout">
+          <div className="mcf-section-head">
+            <h3 id="mcf-your-layout" className="mcf-section-title">
+              Your layout
+            </h3>
+            <div className="mcf-row">
+              <button type="button" className="mcf-link-button" disabled={!canUndo} onClick={() => dispatch({ type: 'undo' })}>
+                Undo
+              </button>
+              {!isEmpty ? (
+                <button type="button" className="mcf-link-button" onClick={onResetLayout}>
+                  Reset layout
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {snapshot.ghosts.length > 0 && !isEmpty ? (
+            <div className="mcf-row">
+              {snapshot.ghosts.map((ghost) => (
+                <button
+                  key={ghost.end}
+                  type="button"
+                  className="mcf-chip"
+                  aria-pressed={pickerEnd === ghost.end}
+                  onClick={() => onOpenPicker(ghost.end)}
+                >
+                  + {ghost.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
         {!isEmpty ? (
           <ol className="mcf-units">
@@ -260,7 +270,7 @@ export function LayoutWorkspace({
             })}
           </ol>
         ) : null}
-      </section>
+        </section>
 
       {otherOptions.map((option) => {
         const chosen = option.values.find((value) => value.id === layoutChoices[option.id])
@@ -285,29 +295,29 @@ export function LayoutWorkspace({
         )
       })}
 
-      <div className="mcf-ws-foot">
-        <div className="mcf-price-block">
-          <span className="mcf-price-now">{money(view.price.total * layoutQuantity)}</span>
-          {view.price.compareAtTotal !== null ? (
-            <span className="mcf-price-was">{money(view.price.compareAtTotal * layoutQuantity)}</span>
+        <div className="mcf-ws-foot">
+          <div className="mcf-price-block">
+            <span className="mcf-price-now">{money(view.price.total * layoutQuantity)}</span>
+            {view.price.compareAtTotal !== null ? (
+              <span className="mcf-price-was">{money(view.price.compareAtTotal * layoutQuantity)}</span>
+            ) : null}
+            {view.price.retailTotal !== null ? (
+              <span className="mcf-price-rrp">RRP {money(view.price.retailTotal * layoutQuantity)}</span>
+            ) : null}
+            {priceSuffix ? <span className="mcf-price-note">{priceSuffix}</span> : null}
+            <button type="button" className="mcf-reset" onClick={onReset}>
+              Reset options
+            </button>
+          </div>
+          {delivery ? (
+            <LayoutDeliveryPicker
+              delivery={delivery}
+              itemCount={draft.chain.length * layoutQuantity}
+              layoutQuantity={layoutQuantity}
+              currencySymbol={currencySymbol}
+              onChange={setDeliveryChoice}
+            />
           ) : null}
-          {view.price.retailTotal !== null ? (
-            <span className="mcf-price-rrp">RRP {money(view.price.retailTotal * layoutQuantity)}</span>
-          ) : null}
-          {priceSuffix ? <span className="mcf-price-note">{priceSuffix}</span> : null}
-          <button type="button" className="mcf-reset" onClick={onReset}>
-            Reset options
-          </button>
-        </div>
-        {delivery ? (
-          <LayoutDeliveryPicker
-            delivery={delivery}
-            itemCount={draft.chain.length * layoutQuantity}
-            layoutQuantity={layoutQuantity}
-            currencySymbol={currencySymbol}
-            onChange={setDeliveryChoice}
-          />
-        ) : null}
 
         {addBlockedBecause ? (
           <p className="mcf-status mcf-status--problem">{addBlockedBecause}</p>
@@ -333,42 +343,43 @@ export function LayoutWorkspace({
           </div>
         )}
 
-        <div className="mcf-buy-row">
-          <div className="mcf-qty" role="group" aria-label="How many of this layout">
+          <div className="mcf-buy-row">
+            <div className="mcf-qty" role="group" aria-label="How many of this layout">
+              <button
+                type="button"
+                aria-label="One fewer"
+                disabled={layoutQuantity <= 1}
+                onClick={() => setLayoutQuantity((value) => Math.max(1, value - 1))}
+              >
+                −
+              </button>
+              <span className="mcf-qty-value" aria-live="polite">
+                {layoutQuantity}
+              </span>
+              <button
+                type="button"
+                aria-label="One more"
+                disabled={layoutQuantity >= MAX_LAYOUT_QUANTITY}
+                onClick={() => setLayoutQuantity((value) => Math.min(MAX_LAYOUT_QUANTITY, value + 1))}
+              >
+                +
+              </button>
+            </div>
             <button
               type="button"
-              aria-label="One fewer"
-              disabled={layoutQuantity <= 1}
-              onClick={() => setLayoutQuantity((value) => Math.max(1, value - 1))}
+              className="mcf-add"
+              disabled={addBlockedBecause !== null || !view.price.buyable}
+              onClick={() => onAddToBasket(layoutQuantity, deliveryMeta)}
             >
-              −
-            </button>
-            <span className="mcf-qty-value" aria-live="polite">
-              {layoutQuantity}
-            </span>
-            <button
-              type="button"
-              aria-label="One more"
-              disabled={layoutQuantity >= MAX_LAYOUT_QUANTITY}
-              onClick={() => setLayoutQuantity((value) => Math.min(MAX_LAYOUT_QUANTITY, value + 1))}
-            >
-              +
+              Add layout to basket
             </button>
           </div>
-          <button
-            type="button"
-            className="mcf-add"
-            disabled={addBlockedBecause !== null || !view.price.buyable}
-            onClick={() => onAddToBasket(layoutQuantity, deliveryMeta)}
-          >
-            Add layout to basket
-          </button>
+          {statusText ? (
+            <p className="mcf-status mcf-status--good" role="status">
+              {statusText}
+            </p>
+          ) : null}
         </div>
-        {statusText ? (
-          <p className="mcf-status mcf-status--good" role="status">
-            {statusText}
-          </p>
-        ) : null}
       </div>
     </div>
   )

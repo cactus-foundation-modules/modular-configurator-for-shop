@@ -114,7 +114,8 @@ the nearest combination it is made in, and its row says what it is in
   overall sizes on or off - with a "Your layout" thumbnail leading the strip and the
   photographs still underneath it; clicking a photo shows the photo, and any change to the
   layout brings the view back. Switching to "Shop individual items" hands the gallery back.
-  (On a page with no gallery, the view is drawn in the tab instead.) The tab holds what can be added where
+  On a phone the layout view stays pinned over the product tab row while the builder controls scroll.
+  On a page with no gallery, the view is drawn in the tab instead and pins in the same place. The tab holds what can be added where
   and why not, the units in order, a panel for the selected unit (swap it, give it its own
   fabric, take it out), starting shapes, the layout's own options, undo, then the price
   (styled like the individual tab's, with "Reset options" beside it to start again), the

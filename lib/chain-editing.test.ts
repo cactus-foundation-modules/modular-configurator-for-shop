@@ -53,10 +53,15 @@ describe('what can be added where', () => {
       right: 'piece-closed-on-joining-side',
       corner: null,
     })
-    // The space is drawn where the arm unit moves out to: just past its old spot.
+    // The space is drawn where the new unit will sit, just inside the arm unit.
     const centralSpace = atEnd.find((c) => c.definition.pieceId === 'central')?.footprint
     const armUnit = placed[2]
-    expect(centralSpace?.minX).toBe((armUnit?.footprint.minX ?? Number.NaN) + 660)
+    expect(centralSpace?.minX).toBe(armUnit?.footprint.minX)
+
+    const atStart = candidatesAtEnd(placed, 'start', ALL, LIMITS)
+    const cornerSpace = atStart.find((c) => c.definition.pieceId === 'corner')?.footprint
+    const leftArm = placed[0]
+    expect(cornerSpace?.maxX).toBe(leftArm?.footprint.maxX)
 
     const grown = addAtEnd(sofa, 'end', { entryId: 'n', pieceId: 'central' }, DEFINITIONS, LIMITS)
     expect(grown.ok && grown.chain.map((entry) => entry.pieceId)).toEqual(['left', 'central', 'central', 'right'])

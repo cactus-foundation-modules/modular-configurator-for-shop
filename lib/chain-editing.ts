@@ -157,7 +157,9 @@ const PROBE_ENTRY_ID = 'mcf-probe'
  * Every piece type offered at one end, each with where its space is drawn and
  * why it is refused if it is. Refused pieces stay in the list so the picker can
  * say why, rather than options silently vanishing. The space is where the new
- * unit lands at an open end, and where the arm unit moves out to at a closed one.
+ * unit lands. At a closed arm end that is the space just inside the arm; the
+ * arm unit moves out when the shopper picks a unit, but the prompt belongs
+ * where the new unit will actually sit.
  */
 export function candidatesAtEnd(
   placed: readonly PlacedPiece[],
@@ -182,7 +184,7 @@ export function candidatesAtEnd(
     const trial = fitting?.trialChain ?? chain
     const refusal = placed.length >= limits.maxPieces ? 'too-many-pieces' : (fitting?.problem ?? null)
     const trialPlaced = anchorLayout(placeChain(trial, byId), placed, plan.displacedEntryId)
-    const marker = trialPlaced.find((piece) => piece.entry.entryId === (plan.displacedEntryId ?? PROBE_ENTRY_ID))
+    const marker = trialPlaced.find((piece) => piece.entry.entryId === PROBE_ENTRY_ID)
     const pose = marker?.pose ?? ORIGIN_POSE
     return { definition, pose, footprint: marker?.footprint ?? footprintAt(definition, pose), refusal }
   })
