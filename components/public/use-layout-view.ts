@@ -170,6 +170,7 @@ export function useLayoutView(
           pieceId: entry.pieceId,
           choices: draft.unitChoices[entry.entryId] ?? {},
           flipped: entry.flipped === true,
+          turned: entry.turned === true,
           front: entry.frontSpur
             ? {
                 pieceId: entry.frontSpur.pieceId,

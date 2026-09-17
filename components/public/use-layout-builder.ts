@@ -18,6 +18,7 @@ import {
   removeEntry,
   replaceEntry,
   replaceFrontSpur,
+  turnEntry,
   type ChainLimits,
   type EditRefusal,
   type EditResult,
@@ -57,6 +58,7 @@ export type BuilderAction =
         pieceId: string
         choices?: OptionSelection
         flipped?: boolean
+        turned?: boolean
         front?: { pieceId: string; choices?: OptionSelection }
       }>
       byShopper: boolean
@@ -67,6 +69,7 @@ export type BuilderAction =
   | { type: 'remove'; entryId: string }
   | { type: 'swap'; entryId: string; pieceId: string }
   | { type: 'flip'; entryId: string }
+  | { type: 'turn'; entryId: string }
   | { type: 'set-unit-choice'; entryId: string; optionId: string; valueId: string | null }
   | { type: 'select'; entryId: string | null }
   | { type: 'undo' }
@@ -135,7 +138,12 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
           if (!definitions.has(unit.pieceId) || layoutPieceCount(chain) >= limits.maxPieces) return
           const entryId = entryIdFor(number)
           number += 1
-          let entry: ChainEntry = unit.flipped ? { entryId, pieceId: unit.pieceId, flipped: true } : { entryId, pieceId: unit.pieceId }
+          let entry: ChainEntry = {
+            entryId,
+            pieceId: unit.pieceId,
+            ...(unit.flipped ? { flipped: true } : {}),
+            ...(unit.turned ? { turned: true } : {}),
+          }
           if (unit.choices) unitChoices[entryId] = unit.choices
           if (unit.front && definitions.has(unit.front.pieceId) && layoutPieceCount([...chain, entry]) < limits.maxPieces) {
             const spurId = entryIdFor(number)
@@ -183,6 +191,8 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
       }
       case 'flip':
         return applyEdit(state, flipEntry(state.draft.chain, action.entryId, definitions, limits))
+      case 'turn':
+        return applyEdit(state, turnEntry(state.draft.chain, action.entryId, definitions, limits))
       case 'set-unit-choice': {
         const current = { ...(state.draft.unitChoices[action.entryId] ?? {}) }
         if (action.valueId) current[action.optionId] = action.valueId

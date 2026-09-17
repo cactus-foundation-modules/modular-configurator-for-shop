@@ -8,7 +8,8 @@
 // slug. A unit's own choices follow its slug after "~", as `option-key:value-slug`
 // pairs, where the option key is the same slugified option name shop-variations
 // uses for its own parameters. A unit laid the other way round (a curve with no
-// back) carries a bare "~flip", which a link reader that predates it ignores. Slugs, not ids, for the same reason the stored
+// back) carries a bare "~flip", and a backless unit turned a quarter a bare "~turn",
+// both of which a link reader that predates them ignores. Slugs, not ids, for the same reason the stored
 // set-up uses them: an id means nothing to the next catalogue import.
 //
 // The parameter has a name of its own rather than reusing shop-variations' one
@@ -23,6 +24,7 @@ const UNIT_SEPARATOR = '.'
 const CHOICE_SEPARATOR = '~'
 const PAIR_SEPARATOR = ':'
 const FLIP_MARK = 'flip'
+const TURN_MARK = 'turn'
 const FRONT_MARK = 'front'
 
 /** A backless unit on the front edge of the host in this segment. */
@@ -36,6 +38,8 @@ export interface LayoutCodeUnit {
   pieceId: string
   choices: OptionSelection
   flipped: boolean
+  /** A backless unit turned a quarter. */
+  turned?: boolean
   front?: LayoutCodeFrontSpur
 }
 
@@ -60,6 +64,7 @@ export function encodeLayout(units: readonly LayoutCodeUnit[], vocabulary: Layou
       const parts = [
         slug,
         ...(unit.flipped ? [FLIP_MARK] : []),
+        ...(unit.turned ? [TURN_MARK] : []),
         ...(frontSlug ? [`${FRONT_MARK}${PAIR_SEPARATOR}${frontSlug}`] : []),
         ...encodeChoices(unit.choices, vocabulary.otherOptions),
         ...(unit.front ? encodeChoices(unit.front.choices, vocabulary.otherOptions, `${FRONT_MARK}-`) : []),
@@ -100,17 +105,19 @@ export function decodeLayout(code: string, vocabulary: LayoutCodeVocabulary): De
     if (!pieceId) continue
     const rest = parts.slice(1)
     const flipped = rest.includes(FLIP_MARK)
+    const turned = rest.includes(TURN_MARK)
     const frontPart = rest.find((part) => part.startsWith(`${FRONT_MARK}${PAIR_SEPARATOR}`))
     const frontSlug = frontPart?.slice(FRONT_MARK.length + 1)
     const frontPieceId = frontSlug ? pieceIdBySlug.get(frontSlug) : undefined
     const hostPairs = rest.filter(
-      (part) => part !== FLIP_MARK && part !== frontPart && !part.startsWith(`${FRONT_MARK}-`),
+      (part) => part !== FLIP_MARK && part !== TURN_MARK && part !== frontPart && !part.startsWith(`${FRONT_MARK}-`),
     )
     const spurPairs = rest.filter((part) => part.startsWith(`${FRONT_MARK}-`)).map((part) => part.slice(FRONT_MARK.length + 1))
     units.push({
       pieceId,
       choices: decodeChoices(hostPairs, optionByKey),
       flipped,
+      ...(turned ? { turned: true } : {}),
       front: frontPieceId ? { pieceId: frontPieceId, choices: decodeChoices(spurPairs, optionByKey) } : undefined,
     })
   }

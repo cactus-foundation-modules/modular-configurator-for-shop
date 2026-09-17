@@ -9,6 +9,7 @@
 import type { ReactNode } from 'react'
 import { formatMoney } from '@/modules/shop/lib/money'
 import { placeChain, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { chainFromUnits } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { suggestPresets } from '@/modules/modular-configurator-for-shop/lib/suggested-presets'
 import { unitCountLabel } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
 import { ConfiguratorTabs } from '@/modules/modular-configurator-for-shop/components/public/ConfiguratorTabs'
@@ -40,8 +41,8 @@ const SAMPLE_LABELS: Record<string, string> = { left: 'Left unit', middle: 'Midd
 function samplePresets() {
   const definitions = new Map(SAMPLE_PIECES.map((piece) => [piece.pieceId, piece]))
   return suggestPresets(SAMPLE_PIECES, { maxPieces: 12 }).map((preset, index) => {
-    const chain = preset.pieceIds.map((pieceId, position) => ({ entryId: `s${index}-${position}`, pieceId }))
-    const total = preset.pieceIds.reduce((sum, pieceId) => sum + (SAMPLE_PRICES[pieceId] ?? 0), 0)
+    const chain = chainFromUnits(preset.units, `s${index}-`)
+    const total = preset.units.reduce((sum, unit) => sum + (SAMPLE_PRICES[unit.pieceId] ?? 0), 0)
     return {
       key: String(index),
       name: preset.name,

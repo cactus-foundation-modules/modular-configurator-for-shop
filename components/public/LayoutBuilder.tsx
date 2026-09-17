@@ -14,12 +14,12 @@
 // taps on it come back here. Only on a page with no gallery to host it does the
 // view appear in this tab instead.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { spaceOfKey, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { chainFromUnits, spaceOfKey, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { formatMoney } from '@/modules/shop/lib/money'
 import { taxViewAmounts, type ProductTaxView } from '@/modules/shop/lib/tax-view-shared'
 import { useVariationSelection } from '@/modules/shop-variations/lib/use-variation-selection'
 import type { PackedVariationBootstrap } from '@/modules/shop-variations/lib/variation-bootstrap-pack'
-import { placeChain } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { layoutPieceCount, placeLayout } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { decodeLayout, LAYOUT_PARAM } from '@/modules/modular-configurator-for-shop/lib/layout-code'
 import { priceLayout } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { unitCountLabel } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
@@ -128,13 +128,13 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
   const presets = useMemo<PresetTileView[]>(() => {
     if (!payload) return []
     return storefront.presets.map((preset, index) => {
-      const chain = preset.pieceIds.map((pieceId, position) => ({ entryId: `p${index}-${position}`, pieceId }))
+      const chain = chainFromUnits(preset.units, `p${index}-`)
       const price = priceLayout(payload, storefront.pieceOptionId, chain, layoutChoices, {})
       return {
         key: String(index),
         name: preset.name,
-        placed: placeChain(chain, definitions),
-        unitCountText: unitCountLabel(chain.length),
+        placed: placeLayout(chain, definitions),
+        unitCountText: unitCountLabel(layoutPieceCount(chain)),
         priceText: price.total > 0 ? formatMoney(price.total, selection.currencySymbol) : '',
         // Both sides of tax where the shopper's VAT switch is on (shop's
         // lib/tax-view-shared.ts), so a tile follows it like every other price.
@@ -263,7 +263,15 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         onStartPreset={(key) => {
           const preset = storefront.presets[Number(key)]
           if (!preset) return
-          dispatch({ type: 'start-from', units: preset.pieceIds.map((pieceId) => ({ pieceId })), byShopper: true })
+          dispatch({
+            type: 'start-from',
+            units: preset.units.map((unit) => ({
+              pieceId: unit.pieceId,
+              ...(unit.turned ? { turned: true } : {}),
+              ...(unit.frontPieceId ? { front: { pieceId: unit.frontPieceId } } : {}),
+            })),
+            byShopper: true,
+          })
           setStatusText(null)
         }}
         onDesignOwn={() => {

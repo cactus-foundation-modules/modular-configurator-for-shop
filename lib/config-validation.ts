@@ -2,10 +2,11 @@
 // can say: the unit option exists, every unit is one of its values, and each
 // ready-made layout can actually be built. Returns the first problem as a
 // sentence for the owner, or null. Pure, so the save route and its tests agree.
-import { findChainProblem } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
-import type { PieceConfig, SaveConfiguratorBody } from '@/modules/modular-configurator-for-shop/lib/config-schema'
+import { chainFromUnits, findChainProblem } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { canBeFrontSpur, canHostFrontSpur, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { presetUnitsOf, type PieceConfig, type SaveConfiguratorBody } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 import { sameOptionName } from '@/modules/modular-configurator-for-shop/lib/piece-catalogue'
+import { presetLayoutUnits } from '@/modules/modular-configurator-for-shop/lib/preset-units'
 
 export interface OptionForValidation {
   name: string
@@ -43,10 +44,19 @@ export function validateConfigAgainstOptions(
     const name = preset.name.trim().toLowerCase()
     if (presetNames.has(name)) return `There are two ready-made layouts called "${preset.name}"`
     presetNames.add(name)
-    const unknown = preset.valueSlugs.find((slug) => !definitions.has(slug))
-    if (unknown) return `"${preset.name}" uses ${labelBySlug.get(unknown) ?? unknown}, which is not set up as a unit`
-    const chain = preset.valueSlugs.map((pieceId, index) => ({ entryId: `check-${index}`, pieceId }))
-    const problem = findChainProblem(chain, definitions, { maxPieces: config.maxPieces })
+    const units = presetUnitsOf(preset)
+    const labelOf = (slug: string) => labelBySlug.get(slug) ?? slug
+    const unknown = units.flatMap((unit) => [unit.valueSlug, ...(unit.frontSlug ? [unit.frontSlug] : [])]).find((slug) => !definitions.has(slug))
+    if (unknown) return `"${preset.name}" uses ${labelOf(unknown)}, which is not set up as a unit`
+    for (const unit of units) {
+      const host = definitions.get(unit.valueSlug)
+      const front = unit.frontSlug ? definitions.get(unit.frontSlug) : undefined
+      if (unit.frontSlug && host && front && !(canHostFrontSpur(host) && canBeFrontSpur(front))) {
+        return `"${preset.name}" stands ${labelOf(unit.frontSlug)} in front of ${labelOf(unit.valueSlug)}: only a straight unit with no back can stand in front, and only of a straight unit with one`
+      }
+    }
+    const specs = presetLayoutUnits(preset, (slug) => (definitions.has(slug) ? slug : undefined)) ?? []
+    const problem = findChainProblem(chainFromUnits(specs, 'check-'), definitions, { maxPieces: config.maxPieces })
     if (problem) return `"${preset.name}" cannot be built: ${PRESET_PROBLEM_WORDING[problem]}`
   }
   return null
@@ -75,6 +85,7 @@ const PRESET_PROBLEM_WORDING: Record<NonNullable<ReturnType<typeof findChainProb
   'end-is-closed': 'a unit is joined on to an arm',
   'layout-is-closed': 'it carries on after it has joined up all the way round',
   'cannot-flip': 'it turns round a unit that only goes one way',
+  'cannot-turn': 'it turns a unit that has a back',
   'piece-closed-on-joining-side': 'a unit is joined on to an arm',
   'neighbours-cannot-join': 'two neighbouring units meet arm to seat',
   'would-overlap': 'the units would sit on top of each other',

@@ -1,6 +1,7 @@
 // What the product page's layout builder is handed by the server. Plain,
 // JSON-serialisable data only: it crosses the server/client boundary as a prop,
 // and Puck deep-copies block props on the way in (a Date would arrive as {}).
+import type { LayoutUnitSpec } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { P3dFormat } from '@/modules/product-3d-views-for-shop/lib/formats'
 import type { PieceConfig, ViewSummaryChoice } from '@/modules/modular-configurator-for-shop/lib/config-schema'
@@ -21,10 +22,10 @@ export interface StorefrontPiece {
   fallbackModel: { url: string; format: P3dFormat } | null
 }
 
-/** A ready-made starting layout, as an ordered list of unit option value ids. */
+/** A ready-made starting layout: its units in order, by unit option value id, with any front units and turns. */
 export interface StorefrontPreset {
   name: string
-  pieceIds: string[]
+  units: LayoutUnitSpec[]
 }
 
 /** The 3D views module's look, so the builder's scene matches the gallery's. */

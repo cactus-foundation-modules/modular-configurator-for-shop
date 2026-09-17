@@ -151,11 +151,11 @@ describe('a rounded end', () => {
 describe('starting layouts for a rounded range', () => {
   it('offers a booth and both islands alongside the sofas, backed central units first', () => {
     expect(suggestPresets(ALL, { maxPieces: 12 })).toEqual([
-      { name: 'Pair', pieceIds: ['left', 'right'] },
-      { name: 'Row of three', pieceIds: ['left', 'central', 'right'] },
-      { name: 'Booth', pieceIds: ['outer', 'outer', 'outer'] },
-      { name: 'Round island', pieceIds: ['inner', 'inner', 'inner', 'inner'] },
-      { name: 'Capsule island', pieceIds: ['d-end', 'central', 'central', 'd-end', 'central', 'central'] },
+      { name: 'Pair', units: [{ pieceId: 'left' }, { pieceId: 'right' }] },
+      { name: 'Row of three', units: [{ pieceId: 'left' }, { pieceId: 'central' }, { pieceId: 'right' }] },
+      { name: 'Booth', units: [{ pieceId: 'outer' }, { pieceId: 'outer' }, { pieceId: 'outer' }] },
+      { name: 'Round island', units: [{ pieceId: 'inner' }, { pieceId: 'inner' }, { pieceId: 'inner' }, { pieceId: 'inner' }] },
+      { name: 'Capsule island', units: [{ pieceId: 'd-end' }, { pieceId: 'central' }, { pieceId: 'central' }, { pieceId: 'd-end' }, { pieceId: 'central' }, { pieceId: 'central' }] },
     ])
   })
 })

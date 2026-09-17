@@ -10,6 +10,7 @@ import {
   DEFAULT_MAX_PIECES,
   MAX_PIECES_CEILING,
   VIEW_SUMMARY_CHOICES,
+  presetWithoutUnit,
   type ConfiguratorConfig,
   type PieceConfig,
   type ViewSummaryChoice,
@@ -106,7 +107,7 @@ export function ModularConfiguratorEditor({ productId }: { productId: string }) 
     // Units keep the option's own order, whatever order they were ticked in.
     const order = new Map((pieceOption?.values ?? []).map((value, index) => [value.slug, index]))
     const pieces = piece ? [...others, piece].sort((a, b) => (order.get(a.valueSlug) ?? 0) - (order.get(b.valueSlug) ?? 0)) : others
-    const presets = piece ? config.presets : config.presets.map((preset) => ({ ...preset, valueSlugs: preset.valueSlugs.filter((candidate) => candidate !== slug) }))
+    const presets = piece ? config.presets : config.presets.map((preset) => presetWithoutUnit(preset, slug))
     changeConfig({ ...config, pieces, presets })
   }
 

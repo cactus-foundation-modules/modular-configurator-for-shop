@@ -142,11 +142,11 @@ describe('a half curve with no back', () => {
 describe('starting layouts for a range with half curves', () => {
   it('offers a horseshoe, a round booth and a round island made of half curves', () => {
     expect(suggestPresets([CENTRAL, LEFT_END, RIGHT_END, HALF_OUT, HALF_IN, HALF_NONE], LIMITS)).toEqual([
-      { name: 'Pair', pieceIds: ['left', 'right'] },
-      { name: 'Row of three', pieceIds: ['left', 'central', 'right'] },
-      { name: 'Horseshoe', pieceIds: ['left', 'central', 'half-out', 'central', 'right'] },
-      { name: 'Round booth', pieceIds: ['half-out', 'half-out'] },
-      { name: 'Round island', pieceIds: ['half-in', 'half-in'] },
+      { name: 'Pair', units: [{ pieceId: 'left' }, { pieceId: 'right' }] },
+      { name: 'Row of three', units: [{ pieceId: 'left' }, { pieceId: 'central' }, { pieceId: 'right' }] },
+      { name: 'Horseshoe', units: [{ pieceId: 'left' }, { pieceId: 'central' }, { pieceId: 'half-out' }, { pieceId: 'central' }, { pieceId: 'right' }] },
+      { name: 'Round booth', units: [{ pieceId: 'half-out' }, { pieceId: 'half-out' }] },
+      { name: 'Round island', units: [{ pieceId: 'half-in' }, { pieceId: 'half-in' }] },
     ])
   })
 })

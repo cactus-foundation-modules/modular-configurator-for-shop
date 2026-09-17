@@ -11,6 +11,7 @@ import {
   acceptsJoinBefore,
   anchorLayout,
   canBeFrontSpur,
+  canBeTurned,
   canHostFrontSpur,
   footprintAt,
   isReversible,
@@ -38,6 +39,8 @@ export type EditRefusal =
   | 'layout-is-closed'
   /** Only a curve with no back can be turned the other way round. */
   | 'cannot-flip'
+  /** Only a straight unit with no back can be turned a quarter. */
+  | 'cannot-turn'
   /** The new piece's arm or end panel would face into the layout. */
   | 'piece-closed-on-joining-side'
   /** The piece would sit on top of another. */
@@ -89,6 +92,25 @@ export function spaceOfKey(key: SpaceKey): LayoutSpace {
   return key === 'start' || key === 'end' ? { kind: 'end', end: key } : { kind: 'front', hostEntryId: key.slice(FRONT_SPACE_PREFIX.length) }
 }
 
+/** One unit of a layout written down rather than built: a ready-made layout's, say. */
+export interface LayoutUnitSpec {
+  pieceId: string
+  /** A backless unit stood in front of this one. */
+  frontPieceId?: string
+  /** This backless unit turned a quarter. */
+  turned?: boolean
+}
+
+/** The chain a written-down layout describes, with entry ids made from `idPrefix`. */
+export function chainFromUnits(units: readonly LayoutUnitSpec[], idPrefix: string): ChainEntry[] {
+  return units.map((unit, index) => ({
+    entryId: `${idPrefix}${index}`,
+    pieceId: unit.pieceId,
+    ...(unit.turned ? { turned: true } : {}),
+    ...(unit.frontPieceId ? { frontSpur: { entryId: `${idPrefix}${index}-front`, pieceId: unit.frontPieceId } } : {}),
+  }))
+}
+
 export function canJoin(before: PieceDefinition, after: PieceDefinition): boolean {
   return acceptsJoinAfter(before) && acceptsJoinBefore(after)
 }
@@ -105,6 +127,7 @@ export function findChainProblem(
     const definition = definitions.get(entry.pieceId)
     if (!definition) return 'unknown-piece'
     if (previous && !canJoin(previous, definition)) return 'neighbours-cannot-join'
+    if (entry.turned && !canBeTurned(definition)) return 'cannot-turn'
     if (entry.frontSpur) {
       const spurDefinition = definitions.get(entry.frontSpur.pieceId)
       if (!spurDefinition) return 'unknown-piece'
@@ -397,6 +420,50 @@ export function flipEntry(
   const next = [...chain]
   next[index] = { entryId: current.entryId, pieceId: current.pieceId, flipped: current.flipped !== true }
   return checked(next, definitions, limits)
+}
+
+/** Turns a backless straight unit a quarter, or back again. */
+export function turnEntry(
+  chain: readonly ChainEntry[],
+  entryId: string,
+  definitions: ReadonlyMap<string, PieceDefinition>,
+  limits: ChainLimits,
+): EditResult {
+  const index = chain.findIndex((entry) => entry.entryId === entryId)
+  const current = chain[index]
+  if (!current) return { ok: false, refusal: 'unknown-entry' }
+  const definition = definitions.get(current.pieceId)
+  if (!definition) return { ok: false, refusal: 'unknown-piece' }
+  if (!canBeTurned(definition)) return { ok: false, refusal: 'cannot-turn' }
+  const { turned: _wasTurned, ...rest } = current
+  const next = [...chain]
+  next[index] = current.turned ? rest : { ...rest, turned: true }
+  return checked(next, definitions, limits)
+}
+
+/**
+ * Whether to offer turning this unit a quarter. Only where it is the answer to
+ * something: a backless unit that is not square, beside a corner, where lying
+ * along the run after the corner leaves it square-on to the row before it. One
+ * already turned can always be turned back. Never offered where the turn would
+ * not fit.
+ */
+export function turnIsOffered(
+  chain: readonly ChainEntry[],
+  entryId: string,
+  definitions: ReadonlyMap<string, PieceDefinition>,
+  limits: ChainLimits,
+): boolean {
+  const index = chain.findIndex((entry) => entry.entryId === entryId)
+  const current = chain[index]
+  const definition = current ? definitions.get(current.pieceId) : undefined
+  if (!current || !definition || !canBeTurned(definition)) return false
+  if (!current.turned) {
+    if (definition.widthMm === definition.depthMm) return false
+    const besideCorner = [chain[index - 1], chain[index + 1]].some((neighbour) => neighbour && definitions.get(neighbour.pieceId)?.shape.kind === 'corner')
+    if (!besideCorner) return false
+  }
+  return turnEntry(chain, entryId, definitions, limits).ok
 }
 
 /** Host entry when `entryId` is a front spur; null for main-chain entries. */

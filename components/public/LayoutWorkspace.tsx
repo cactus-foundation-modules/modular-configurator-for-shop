@@ -15,7 +15,7 @@ import { formatMoney } from '@/modules/shop/lib/money'
 import { TaxViewMoney, TaxViewNote } from '@/modules/shop/components/public/TaxViewText'
 import { TaxViewToggle } from '@/modules/shop/components/public/TaxViewToggle'
 import type { ProductTaxView } from '@/modules/shop/lib/tax-view-shared'
-import { frontSpurOptions, hostEntryIdForSpur, swapOptions, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { frontSpurOptions, hostEntryIdForSpur, swapOptions, turnIsOffered, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { layoutValueReachesAUnit, priceLayout, unitIsMadeIn } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { refusalSentence, unitProblemSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
@@ -143,6 +143,11 @@ export function LayoutWorkspace({
   const openSpace = pickerSpace ?? (isEmpty ? 'end' : null)
   const pickerView = openSpace ? spaceViewFor(view, openSpace) : null
   const firstProblem = view.price.units.find((unit) => unit.problem !== null)
+  const resetButton = (
+    <button type="button" className="mcf-reset" onClick={onReset}>
+      Reset options
+    </button>
+  )
   const addBlockedBecause = isEmpty
     ? 'Add a unit to start'
       : firstProblem?.problem
@@ -271,6 +276,12 @@ export function LayoutWorkspace({
                         madeIn={unit.selection}
                         adjustedOptionIds={unit.adjustedOptionIds}
                         onFlip={definition && isReversible(definition) && !isFrontSpur ? () => dispatch({ type: 'flip', entryId: unit.entry.entryId }) : undefined}
+                        onTurn={
+                          !isFrontSpur && turnIsOffered(draft.chain, unit.entry.entryId, definitions, { maxPieces: storefront.maxPieces })
+                            ? () => dispatch({ type: 'turn', entryId: unit.entry.entryId })
+                            : undefined
+                        }
+                        turned={unit.entry.turned === true}
                         frontSpurTo={frontSpurChoices}
                         onAddFrontSpur={
                           frontSpurChoices.length > 0
@@ -328,9 +339,6 @@ export function LayoutWorkspace({
             {view.price.retailTotal !== null ? (
               <span className="mcf-price-rrp">RRP {figure(view.price.retailTotal * layoutQuantity)}</span>
             ) : null}
-            <button type="button" className="mcf-reset" onClick={onReset}>
-              Reset options
-            </button>
           </div>
           {delivery ? (
             <LayoutDeliveryPicker
@@ -343,27 +351,38 @@ export function LayoutWorkspace({
             />
           ) : null}
 
+        {/* Reset options sits at the far end of whichever line is above the buy
+            row - the green read-back or the reason it cannot be bought yet - as
+            it does on the individual items tab, rather than ending the price row
+            and pushing the figures onto a second line. */}
         {addBlockedBecause ? (
-          <p className="mcf-status mcf-status--problem">{addBlockedBecause}</p>
+          <div className="mcf-status-row">
+            <p className="mcf-status mcf-status--problem">{addBlockedBecause}</p>
+            {resetButton}
+          </div>
         ) : (
           // Same green "ready" box as the individual items tab, in the same place above the buy row.
-          <div className="mcf-ready" role="status">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-            <span>
-              Ready to add: {view.shapeLabel} · {view.countsText}
+          <div className="mcf-ready">
+            {/* The announcement is the words alone, not the link beside them. */}
+            <span className="mcf-ready-text" role="status">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+              <span>
+                Ready to add: {view.shapeLabel} · {view.countsText}
+              </span>
             </span>
+            {resetButton}
           </div>
         )}
 

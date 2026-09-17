@@ -64,10 +64,10 @@ describe('the layout link code', () => {
 describe('suggested starting layouts', () => {
   it('climbs from a pair to a U out of the range’s own units', () => {
     expect(suggestPresets(SEATING_PIECES, { maxPieces: 12 })).toEqual([
-      { name: 'Pair', pieceIds: ['v-left', 'v-right'] },
-      { name: 'Row of three', pieceIds: ['v-left', 'v-central', 'v-right'] },
-      { name: 'L-shape', pieceIds: ['v-left', 'v-central', 'v-corner', 'v-central', 'v-right'] },
-      { name: 'U-shape', pieceIds: ['v-left', 'v-corner', 'v-central', 'v-corner', 'v-right'] },
+      { name: 'Pair', units: [{ pieceId: 'v-left' }, { pieceId: 'v-right' }] },
+      { name: 'Row of three', units: [{ pieceId: 'v-left' }, { pieceId: 'v-central' }, { pieceId: 'v-right' }] },
+      { name: 'L-shape', units: [{ pieceId: 'v-left' }, { pieceId: 'v-central' }, { pieceId: 'v-corner' }, { pieceId: 'v-central' }, { pieceId: 'v-right' }] },
+      { name: 'U-shape', units: [{ pieceId: 'v-left' }, { pieceId: 'v-corner' }, { pieceId: 'v-central' }, { pieceId: 'v-corner' }, { pieceId: 'v-right' }] },
     ])
   })
 

@@ -49,6 +49,11 @@
  * to back: its flat side (`widthMm`) runs along z = -depth/2 and is two faces
  * sharing their back corner in its middle. Walking in through the left half and
  * out of the right half turns the chain right round.
+ *
+ * A backless straight unit can be TURNED a quarter: the walk then goes in through
+ * its back and out through its front instead of its sides, and a join either
+ * side of it lines up the middles of the two faces. Out of a corner, that stands
+ * the unit square to the row before the corner rather than along the row after it.
  */
 
 /** A 2D point or direction on the floor plane, in millimetres. */
@@ -121,6 +126,8 @@ export interface ChainEntry {
   flipped?: boolean
   /** Backless unit in front of this one's seat (backed straights only). */
   frontSpur?: FrontSpur
+  /** A backless straight unit turned a quarter, joined through its back and front. */
+  turned?: boolean
 }
 
 /** Where one piece sits on the floor. `rotationY` matches three.js `rotation.y`. */
@@ -277,12 +284,36 @@ function roundEndFace(depthMm: number, towardsLeft: boolean): JoinFace {
   return { backCorner: { x: 0, z: -depthMm / 2 }, outward: { x: 0, z: -1 }, towardsFront: { x: towardsLeft ? -1 : 1, z: 0 } }
 }
 
+/** How an entry is laid, as far as its faces care. */
+type EntryLay = Pick<ChainEntry, 'flipped' | 'turned'>
+
+/** True for a backless straight unit laid turned a quarter. */
+export function isTurned(definition: PieceDefinition, lay: EntryLay): boolean {
+  return lay.turned === true && canBeTurned(definition)
+}
+
+/** True for a piece that can be turned a quarter: a straight unit with no back. */
+export function canBeTurned(definition: PieceDefinition): boolean {
+  return isStraightBackless(definition)
+}
+
+/**
+ * The back or front of a turned unit, walked from back to front. Its back
+ * corner is taken at +x so the face runs the way a side face would if the whole
+ * unit were turned a quarter with the walk.
+ */
+function turnedFace(widthMm: number, depthMm: number, side: 'back' | 'front'): JoinFace {
+  const z = side === 'back' ? -depthMm / 2 : depthMm / 2
+  return { backCorner: { x: widthMm / 2, z }, outward: { x: 0, z: side === 'back' ? -1 : 1 }, towardsFront: { x: -1, z: 0 } }
+}
+
 /** The face a piece is joined through, in its own frame. */
-function entryFaceOf(definition: PieceDefinition, flipped: boolean | undefined): JoinFace {
+function entryFaceOf(definition: PieceDefinition, lay: EntryLay): JoinFace {
   const { shape, widthMm, depthMm } = definition
+  const { flipped } = lay
   switch (shape.kind) {
     case 'straight':
-      return leftFace(widthMm, depthMm)
+      return isTurned(definition, lay) ? turnedFace(widthMm, depthMm, 'back') : leftFace(widthMm, depthMm)
     case 'corner':
       return shape.backSide === 'left' ? cornerFrontFace(widthMm, depthMm, 'left') : leftFace(widthMm, depthMm)
     case 'curve':
@@ -295,11 +326,12 @@ function entryFaceOf(definition: PieceDefinition, flipped: boolean | undefined):
 }
 
 /** The face the next piece joins, in the piece's own frame. */
-function exitFaceOf(definition: PieceDefinition, flipped: boolean | undefined): JoinFace {
+function exitFaceOf(definition: PieceDefinition, lay: EntryLay): JoinFace {
   const { shape, widthMm, depthMm } = definition
+  const { flipped } = lay
   switch (shape.kind) {
     case 'straight':
-      return rightFace(widthMm, depthMm)
+      return isTurned(definition, lay) ? turnedFace(widthMm, depthMm, 'front') : rightFace(widthMm, depthMm)
     case 'corner':
       return shape.backSide === 'left' ? rightFace(widthMm, depthMm) : cornerFrontFace(widthMm, depthMm, 'right')
     case 'curve':
@@ -325,31 +357,42 @@ function isStraightBackless(definition: PieceDefinition): boolean {
   return definition.shape.kind === 'straight' && definition.shape.backless === true
 }
 
+/** Which points of two joining faces are lined up. */
+type JoinAnchor = 'back' | 'front' | 'middle'
+
 /**
- * When a backless straight module joins a backed straight or a corner, seat
- * fronts align. Backless-to-backless stays back-aligned; curves and rounded
- * ends still meet on the back edge.
+ * A join beside a turned unit lines up the middles of the faces. Otherwise, when
+ * a backless straight module joins a backed straight or a corner, seat fronts
+ * align. Backless-to-backless stays back-aligned; curves and rounded ends still
+ * meet on the back edge.
  */
-function joinUsesSeatFront(previous: PieceDefinition, next: PieceDefinition): boolean {
-  const prevBackless = isStraightBackless(previous)
+function joinAnchorFor(previous: PlacedPiece, next: PieceDefinition, nextLay: EntryLay): JoinAnchor {
+  if (isTurned(previous.definition, previous.entry) || isTurned(next, nextLay)) return 'middle'
+  const prevBackless = isStraightBackless(previous.definition)
   const nextBackless = isStraightBackless(next)
-  if (!prevBackless && !nextBackless) return false
-  if (prevBackless && nextBackless) return false
-  const seatFrontJoin =
-    (piece: PieceDefinition) => piece.shape.kind === 'straight' || piece.shape.kind === 'corner'
-  return seatFrontJoin(previous) && seatFrontJoin(next)
+  if (prevBackless === nextBackless) return 'back'
+  const seatFrontJoin = (piece: PieceDefinition) => piece.shape.kind === 'straight' || piece.shape.kind === 'corner'
+  return seatFrontJoin(previous.definition) && seatFrontJoin(next) ? 'front' : 'back'
 }
 
 /**
- * The end of a straight's or corner's face furthest from its backrest: the back
- * corner carried the whole length of the face towards the seat front. A side
- * face runs the piece's depth; a corner's front face runs its width.
+ * How long a face is. A straight's or corner's side face runs its depth and a
+ * face across it (a corner's front, a turned unit's back or front) its width; a
+ * curve's cut end is its seat; a rounded end's face is half its flat side.
  */
-function faceFrontEnd(face: JoinFace, definition: PieceDefinition): FloorVector {
-  const length = Math.abs(face.towardsFront.x) > 0.5 ? definition.widthMm : definition.depthMm
+function faceLength(face: JoinFace, definition: PieceDefinition): number {
+  const { shape } = definition
+  if (shape.kind === 'curve' || shape.kind === 'half-curve') return shape.seatDepthMm
+  if (shape.kind === 'round-end') return definition.widthMm / 2
+  return Math.abs(face.towardsFront.x) > 0.5 ? definition.widthMm : definition.depthMm
+}
+
+/** A point `share` of the way along a face from its back corner towards its front end. */
+function alongFace(face: JoinFace, definition: PieceDefinition, share: number): FloorVector {
+  const distance = faceLength(face, definition) * share
   return {
-    x: roundMillimetre(face.backCorner.x + face.towardsFront.x * length),
-    z: roundMillimetre(face.backCorner.z + face.towardsFront.z * length),
+    x: roundMillimetre(face.backCorner.x + face.towardsFront.x * distance),
+    z: roundMillimetre(face.backCorner.z + face.towardsFront.z * distance),
   }
 }
 
@@ -357,19 +400,22 @@ function faceFrontEnd(face: JoinFace, definition: PieceDefinition): FloorVector 
  * The point on a face that meets the neighbour's, in the piece's own frame. A
  * seat-front join lines up the front ends of the two faces, so the shallower
  * backless unit sits flush with its neighbour's front - along a straight run,
- * and against either open side of a corner, whichever way that side faces.
+ * and against either open side of a corner, whichever way that side faces. A
+ * join beside a turned unit lines up the middles.
  */
-function joinAnchorLocal(face: JoinFace, definition: PieceDefinition, seatFront: boolean): FloorVector {
-  return seatFront ? faceFrontEnd(face, definition) : face.backCorner
+function joinAnchorLocal(face: JoinFace, definition: PieceDefinition, anchor: JoinAnchor): FloorVector {
+  if (anchor === 'front') return alongFace(face, definition, 1)
+  if (anchor === 'middle') return alongFace(face, definition, 0.5)
+  return face.backCorner
 }
 
 function joinAnchorWorld(
   localFace: JoinFace,
   definition: PieceDefinition,
   pose: PiecePose,
-  seatFront: boolean,
+  anchor: JoinAnchor,
 ): FloorVector {
-  const local = joinAnchorLocal(localFace, definition, seatFront)
+  const local = joinAnchorLocal(localFace, definition, anchor)
   const rotated = rotateOnFloor(local, pose.rotationY)
   return {
     x: roundMillimetre(rotated.x + pose.centre.x),
@@ -394,17 +440,13 @@ function transformFace(face: JoinFace, pose: PiecePose): JoinFace {
  * faces back to back, back ends touching (front ends, for a seat-front join),
  * fronts running the same way.
  */
-function poseJoinedAfter(
-  previous: PlacedPiece,
-  definition: PieceDefinition,
-  flipped: boolean | undefined,
-): PiecePose {
-  const previousLocalExit = exitFaceOf(previous.definition, previous.entry.flipped)
+function poseJoinedAfter(previous: PlacedPiece, definition: PieceDefinition, lay: EntryLay): PiecePose {
+  const previousLocalExit = exitFaceOf(previous.definition, previous.entry)
   const previousExit = transformFace(previousLocalExit, previous.pose)
-  const seatFront = joinUsesSeatFront(previous.definition, definition)
-  const entry = entryFaceOf(definition, flipped)
-  const previousAnchor = joinAnchorWorld(previousLocalExit, previous.definition, previous.pose, seatFront)
-  const entryAnchor = joinAnchorLocal(entry, definition, seatFront)
+  const anchor = joinAnchorFor(previous, definition, lay)
+  const entry = entryFaceOf(definition, lay)
+  const previousAnchor = joinAnchorWorld(previousLocalExit, previous.definition, previous.pose, anchor)
+  const entryAnchor = joinAnchorLocal(entry, definition, anchor)
   const facingBack = { x: -previousExit.outward.x, z: -previousExit.outward.z }
   const rotationY = snapToQuarterTurn(headingOf(facingBack) - headingOf(entry.outward))
   const rotatedAnchor = rotateOnFloor(entryAnchor, rotationY)
@@ -446,7 +488,7 @@ export function placeChain(
     if (!definition) throw new UnknownPieceError(entry.pieceId)
     const previous = placed[placed.length - 1]
     const pose: PiecePose = previous
-      ? poseJoinedAfter(previous, definition, entry.flipped)
+      ? poseJoinedAfter(previous, definition, entry)
       : { centre: { x: 0, z: 0 }, rotationY: 0 }
     placed.push({ entry, definition, pose, footprint: footprintAt(definition, pose) })
   }
@@ -556,8 +598,8 @@ export function layoutIsClosed(placed: readonly PlacedPiece[]): boolean {
   const first = placed[0]
   const last = placed[placed.length - 1]
   if (!first || !last || placed.length < 2) return false
-  const entry = transformFace(entryFaceOf(first.definition, first.entry.flipped), first.pose)
-  const exit = transformFace(exitFaceOf(last.definition, last.entry.flipped), last.pose)
+  const entry = transformFace(entryFaceOf(first.definition, first.entry), first.pose)
+  const exit = transformFace(exitFaceOf(last.definition, last.entry), last.pose)
   return (
     sameFloorPoint(entry.backCorner, exit.backCorner) &&
     sameDirection(entry.outward, { x: -exit.outward.x, z: -exit.outward.z }) &&

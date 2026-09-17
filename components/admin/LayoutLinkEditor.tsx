@@ -15,7 +15,7 @@ import {
   type LayoutLink,
   type StartingLayout,
 } from '@/modules/modular-configurator-for-shop/lib/layout-link-schema'
-import { PresetPreview } from '@/modules/modular-configurator-for-shop/components/admin/PresetListEditor'
+import { PresetPreview, slugUnits } from '@/modules/modular-configurator-for-shop/components/admin/PresetListEditor'
 import {
   buttonStyle,
   errorStyle,
@@ -293,7 +293,7 @@ function StartingLayoutRow({ layout, ownOptions, target, onChange }: {
         </div>
       </div>
       {layout.valueSlugs.length > 0 ? (
-        <PresetPreview slugs={layout.valueSlugs} definitions={definitionsBySlug(target.config)} labelBySlug={labelBySlug} maxPieces={target.config.maxPieces} />
+        <PresetPreview units={slugUnits(layout.valueSlugs)} definitions={definitionsBySlug(target.config)} labelBySlug={labelBySlug} maxPieces={target.config.maxPieces} />
       ) : (
         <p style={hintStyle}>Add units to see it.</p>
       )}

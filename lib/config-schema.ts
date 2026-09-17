@@ -77,9 +77,30 @@ export const PieceConfigSchema = z.object({
     .default(AUTOMATIC_MODEL_TURN),
 })
 
+const ValueSlugSchema = z.string().trim().min(1).max(200)
+
+/** One unit of a ready-made layout, with what stands in front of it and how it lies. */
+export const PresetUnitSchema = z.object({
+  valueSlug: ValueSlugSchema,
+  /** A backless unit stood in front of this one. */
+  frontSlug: ValueSlugSchema.optional(),
+  /** This backless unit turned a quarter. */
+  turned: z.boolean().optional(),
+})
+
 export const PresetConfigSchema = z.object({
   name: z.string().trim().min(1).max(60),
-  valueSlugs: z.array(z.string().trim().min(1).max(200)).min(1).max(MAX_PIECES_CEILING),
+  /**
+   * The units in the order they join. Always written in full, so a version of
+   * the module from before `units` still reads the layout's shape.
+   */
+  valueSlugs: z.array(ValueSlugSchema).min(1).max(MAX_PIECES_CEILING),
+  /**
+   * The same units with anything stood in front of them and any that are
+   * turned. Written only when a unit has either; read only while it names the
+   * same units, in the same order, as `valueSlugs`.
+   */
+  units: z.array(PresetUnitSchema).max(MAX_PIECES_CEILING).optional(),
 })
 
 export const ConfiguratorConfigSchema = z.object({
@@ -96,6 +117,34 @@ export const ConfiguratorConfigSchema = z.object({
 export type PieceShapeConfig = z.infer<typeof PieceShapeSchema>
 export type PieceConfig = z.infer<typeof PieceConfigSchema>
 export type PresetConfig = z.infer<typeof PresetConfigSchema>
+export type PresetUnit = z.infer<typeof PresetUnitSchema>
+
+/** A ready-made layout's units in full: its `units` while they match `valueSlugs`, else the plain list. */
+export function presetUnitsOf(preset: Pick<PresetConfig, 'valueSlugs' | 'units'>): PresetUnit[] {
+  const { valueSlugs, units } = preset
+  const inStep = units !== undefined && units.length === valueSlugs.length && units.every((unit, index) => unit.valueSlug === valueSlugs[index])
+  return inStep ? units : valueSlugs.map((valueSlug) => ({ valueSlug }))
+}
+
+/** A ready-made layout written from its units in full, keeping `valueSlugs` in step and `units` only where it says more. */
+export function presetWithUnits(preset: PresetConfig, units: readonly PresetUnit[]): PresetConfig {
+  const tidy: PresetUnit[] = units.map((unit) => ({
+    valueSlug: unit.valueSlug,
+    ...(unit.frontSlug ? { frontSlug: unit.frontSlug } : {}),
+    ...(unit.turned ? { turned: true } : {}),
+  }))
+  const saysMore = tidy.some((unit) => unit.frontSlug !== undefined || unit.turned === true)
+  const written: PresetConfig = { name: preset.name, valueSlugs: tidy.map((unit) => unit.valueSlug) }
+  return saysMore ? { ...written, units: tidy } : written
+}
+
+/** A ready-made layout with every mention of one unit type taken out, front units included. */
+export function presetWithoutUnit(preset: PresetConfig, valueSlug: string): PresetConfig {
+  const units = presetUnitsOf(preset)
+    .filter((unit) => unit.valueSlug !== valueSlug)
+    .map((unit) => (unit.frontSlug === valueSlug ? { valueSlug: unit.valueSlug, turned: unit.turned } : unit))
+  return presetWithUnits(preset, units)
+}
 export type ConfiguratorConfig = z.infer<typeof ConfiguratorConfigSchema>
 
 export const EMPTY_CONFIGURATOR_CONFIG: ConfiguratorConfig = {

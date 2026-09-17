@@ -19,4 +19,16 @@ describe('layout code front spurs', () => {
     const decoded = decodeLayout(code, vocabulary)
     expect(decoded?.units[0]?.front?.pieceId).toBe('backless')
   })
+
+  it('round-trips a turned backless unit, and reads a link without one as not turned', () => {
+    const code = encodeLayout(
+      [
+        { pieceId: 'backed', choices: {}, flipped: false },
+        { pieceId: 'backless', choices: {}, flipped: false, turned: true },
+      ],
+      vocabulary,
+    )
+    expect(code).toBe('infinity-chair-with-back.infinity-backless-unit~turn')
+    expect(decodeLayout(code, vocabulary)?.units.map((unit) => unit.turned === true)).toEqual([false, true])
+  })
 })

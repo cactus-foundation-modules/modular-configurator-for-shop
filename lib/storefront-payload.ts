@@ -12,7 +12,8 @@ import type { P3dConfig } from '@/modules/product-3d-views-for-shop/lib/config-s
 import { getProductConfiguratorCached } from '@/modules/modular-configurator-for-shop/lib/db/configs'
 import { resolvePieceCatalogue, type ResolvedPiece } from '@/modules/modular-configurator-for-shop/lib/piece-catalogue'
 import { suggestPresets } from '@/modules/modular-configurator-for-shop/lib/suggested-presets'
-import { findChainProblem } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { chainFromUnits, findChainProblem } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { presetLayoutUnits } from '@/modules/modular-configurator-for-shop/lib/preset-units'
 import type { ConfiguratorConfig } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 import type {
   ConfiguratorStorefrontPayload,
@@ -93,11 +94,12 @@ function presetsFor(
   const limits = { maxPieces: config.maxPieces }
   if (config.presets.length === 0) return suggestPresets(pieces.map((piece) => piece.definition), limits)
   return config.presets.flatMap((preset) => {
-    const pieceIds = preset.valueSlugs.map((slug) => valueIdBySlug.get(slug))
-    if (pieceIds.some((pieceId) => !pieceId || !definitions.has(pieceId))) return []
-    const known = pieceIds.filter((pieceId): pieceId is string => typeof pieceId === 'string')
-    const chain = known.map((pieceId, index) => ({ entryId: `preset-${index}`, pieceId }))
-    return findChainProblem(chain, definitions, limits) === null ? [{ name: preset.name, pieceIds: known }] : []
+    const units = presetLayoutUnits(preset, (slug) => {
+      const pieceId = valueIdBySlug.get(slug)
+      return pieceId && definitions.has(pieceId) ? pieceId : undefined
+    })
+    if (!units) return []
+    return findChainProblem(chainFromUnits(units, 'preset-'), definitions, limits) === null ? [{ name: preset.name, units }] : []
   })
 }
 

@@ -2,7 +2,8 @@
 
 // The panel for one selected unit, opened in place under its row in the list:
 // swap it for another type that still fits, curve a backless curve the other
-// way, give it choices of its own (a contrasting fabric, say), or take it out.
+// way, turn a backless unit beside a corner to line up with the row, give it
+// choices of its own (a contrasting fabric, say), or take it out.
 import { useId } from 'react'
 import { SwatchSelect } from '@/modules/modular-configurator-for-shop/components/public/SwatchSelect'
 import { swatchOf } from '@/modules/modular-configurator-for-shop/components/public/swatch-style'
@@ -23,6 +24,10 @@ interface UnitEditorProps {
   adjustedOptionIds: readonly string[]
   /** Lays the unit the other way round; only for a unit that can be. */
   onFlip?: () => void
+  /** Turns a backless unit a quarter; only where that is offered. */
+  onTurn?: () => void
+  /** The unit is turned already, so the button turns it back. */
+  turned?: boolean
   /** Whether this unit comes in a value at all, keeping its other choices. */
   isMadeIn: (optionId: string, valueId: string) => boolean
   onSwap: (pieceId: string) => void
@@ -44,6 +49,8 @@ export function UnitEditor({
   madeIn,
   adjustedOptionIds,
   onFlip,
+  onTurn,
+  turned = false,
   isMadeIn,
   onSwap,
   frontSpurTo,
@@ -77,6 +84,17 @@ export function UnitEditor({
                 {labelFor(definition.pieceId)}
               </button>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {onTurn ? (
+        <div className="mcf-section">
+          <p className="mcf-section-note">This unit has no back, so it can face either way</p>
+          <div className="mcf-row">
+            <button type="button" className="mcf-chip" aria-pressed={turned} onClick={onTurn}>
+              {turned ? 'Turn it back' : 'Turn it'}
+            </button>
           </div>
         </div>
       ) : null}

@@ -45,7 +45,7 @@ export const CONFIGURATOR_CSS = `
 .mcf-price-was{font-size:15px;color:var(--color-text-muted);text-decoration:line-through}
 .mcf-price-rrp,.mcf-price-note{font-size:13px;color:var(--color-text-muted)}
 .mcf-price-note{margin-left:-6px}
-.mcf-reset{margin-left:2.5rem;padding:0;border:0;background:none;color:var(--color-text-muted);font:inherit;font-size:.8125rem;font-weight:400;white-space:nowrap;text-decoration:underline;cursor:pointer}
+.mcf-reset{margin-left:auto;padding:0;border:0;background:none;color:var(--color-text-muted);font:inherit;font-size:.8125rem;font-weight:400;white-space:nowrap;text-decoration:underline;cursor:pointer}
 .mcf-reset:hover{color:var(--color-text)}
 .mcf-delivery{display:grid;gap:.375rem}
 .mcf-delivery .scl-hints{gap:0.3375rem;margin-top:0.45rem}
@@ -80,8 +80,13 @@ export const CONFIGURATOR_CSS = `
 .mcf-status{margin:0;font-size:.8125rem;color:var(--color-text-muted)}
 .mcf-status--good{color:var(--color-success)}
 .mcf-status--problem{color:var(--color-error)}
-.mcf-ready{display:flex;align-items:center;gap:.5rem;margin:0;padding:.625rem .875rem;border:1px solid var(--color-success-border);border-radius:10px;background:var(--color-success-bg);color:var(--color-success);font-size:.875rem;font-weight:600;line-height:1.35}
+.mcf-ready{display:flex;align-items:center;flex-wrap:wrap;gap:.25rem .75rem;margin:0;padding:.625rem .875rem;border:1px solid var(--color-success-border);border-radius:10px;background:var(--color-success-bg);color:var(--color-success);font-size:.875rem;font-weight:600;line-height:1.35}
 .mcf-ready svg{flex:none}
+.mcf-ready-text{display:flex;align-items:center;gap:.5rem;flex:1 1 auto;min-width:0}
+.mcf-ready .mcf-reset,.mcf-ready .mcf-reset:hover{color:inherit}
+.mcf-ready .mcf-reset:hover{text-decoration-thickness:2px}
+.mcf-status-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:.25rem .75rem}
+.mcf-status-row .mcf-status{flex:1 1 auto;min-width:0}
 
 .mcf-stage-canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
 .mcf-stage-tools{position:absolute;top:.75rem;left:.75rem;right:.75rem;display:flex;flex-wrap:wrap;gap:.375rem;pointer-events:none}

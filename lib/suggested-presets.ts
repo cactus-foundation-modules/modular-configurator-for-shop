@@ -75,7 +75,7 @@ export function suggestPresets(definitions: readonly PieceDefinition[], limits: 
     const pieceIds = pieceIdsForRecipe(recipe, firstByRole)
     if (!pieceIds) continue
     const chain = pieceIds.map((pieceId, index) => ({ entryId: `preset-${index}`, pieceId }))
-    if (findChainProblem(chain, definitionsById, limits) === null) presets.push({ name: recipe.name, pieceIds })
+    if (findChainProblem(chain, definitionsById, limits) === null) presets.push({ name: recipe.name, units: pieceIds.map((pieceId) => ({ pieceId })) })
   }
   return presets
 }
