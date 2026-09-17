@@ -208,6 +208,7 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
     expect(await configs.getProductConfigurator(PARENT_ID)).toBeNull()
     const config = {
       pieceOptionName: 'Unit',
+      frontUnits: true,
       maxPieces: 8,
       pieces: [
         { valueSlug: 'left-unit', shape: { kind: 'straight' as const, closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760, modelTurnDegrees: 0 as const },
@@ -255,6 +256,7 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
     await prisma.$executeRawUnsafe(`INSERT INTO "svr_option_values" ("id", "option_id", "label", "slug", "position") VALUES ('v-two', 'opt-seats', '2 Seater', '2-seater', 0)`)
     await configs.saveProductConfigurator(PARENT_ID, true, {
       pieceOptionName: 'Unit',
+      frontUnits: true,
       maxPieces: 8,
       pieces: [
         { valueSlug: 'left-unit', shape: { kind: 'straight', closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760, modelTurnDegrees: 'auto' },

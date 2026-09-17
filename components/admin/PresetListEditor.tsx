@@ -27,6 +27,8 @@ interface PresetListEditorProps {
   pieces: readonly PieceConfig[]
   labelBySlug: ReadonlyMap<string, string>
   maxPieces: number
+  /** Whether this range stands a backless unit in front of a backed one. */
+  frontUnits: boolean
   onChange: (presets: PresetConfig[]) => void
 }
 
@@ -46,15 +48,16 @@ export function slugUnits(slugs: readonly string[]): LayoutUnitSpec[] {
   return slugs.map((pieceId) => ({ pieceId }))
 }
 
-export function PresetPreview({ units, definitions, labelBySlug, maxPieces }: {
+export function PresetPreview({ units, definitions, labelBySlug, maxPieces, frontUnits }: {
   /** Keyed by slug. */
   units: readonly LayoutUnitSpec[]
   definitions: ReadonlyMap<string, PieceDefinition>
   labelBySlug: ReadonlyMap<string, string>
   maxPieces: number
+  frontUnits: boolean
 }) {
   const chain = chainFromUnits(units, 'preview-')
-  const problem = findChainProblem(chain, definitions, { maxPieces })
+  const problem = findChainProblem(chain, definitions, { maxPieces, frontUnits })
   if (problem) return <p style={errorStyle}>{refusalSentence(problem, maxPieces)}</p>
   const labelFor = (slug: string) => labelBySlug.get(slug) ?? slug
   return (
@@ -81,7 +84,7 @@ function turnOfferedAt(units: readonly PresetUnit[], index: number, definitions:
   return besideCorner && definition.widthMm !== definition.depthMm
 }
 
-export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, onChange }: PresetListEditorProps) {
+export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, frontUnits, onChange }: PresetListEditorProps) {
   const definitions = definitionsBySlug(pieces)
   const labelFor = (slug: string) => labelBySlug.get(slug) ?? slug
   const update = (index: number, next: PresetConfig) => onChange(presets.map((preset, position) => (position === index ? next : preset)))
@@ -89,7 +92,9 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, onCh
   if (pieces.length === 0) return <p style={hintStyle}>Tick at least one unit above first.</p>
 
   const suggested = presets.length === 0 ? suggestPresets([...definitions.values()], { maxPieces }) : []
-  const frontSlugs = pieces.filter((piece) => {
+  // Nothing may be stood in front unless the range is set to allow it, so the
+  // "in front" control never appears on a range that does not.
+  const frontSlugs = !frontUnits ? [] : pieces.filter((piece) => {
     const definition = definitions.get(piece.valueSlug)
     return definition !== undefined && canBeFrontSpur(definition)
   })
@@ -106,7 +111,7 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, onCh
             {suggested.map((preset) => (
               <div key={preset.name} style={{ display: 'grid', gap: '0.25rem' }}>
                 <span style={labelStyle}>{preset.name}</span>
-                <PresetPreview units={preset.units} definitions={definitions} labelBySlug={labelBySlug} maxPieces={maxPieces} />
+                <PresetPreview units={preset.units} definitions={definitions} labelBySlug={labelBySlug} maxPieces={maxPieces} frontUnits={frontUnits} />
               </div>
             ))}
           </div>
@@ -219,6 +224,7 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, onCh
               definitions={definitions}
               labelBySlug={labelBySlug}
               maxPieces={maxPieces}
+              frontUnits={frontUnits}
             />
           ) : (
             <p style={hintStyle}>Add units to see it.</p>

@@ -60,7 +60,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
     () => new Map(storefront.pieces.map((piece) => [piece.pieceId, piece.definition])),
     [storefront.pieces],
   )
-  const limits = useMemo(() => ({ maxPieces: storefront.maxPieces }), [storefront.maxPieces])
+  const limits = useMemo(() => ({ maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits }), [storefront.maxPieces, storefront.frontUnits])
   const builder = useLayoutBuilder(definitions, limits)
   const { dispatch } = builder
   // "Design your own" opens the builder with nothing in it. A preset or a link

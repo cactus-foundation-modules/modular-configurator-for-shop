@@ -51,12 +51,15 @@ export function validateConfigAgainstOptions(
     for (const unit of units) {
       const host = definitions.get(unit.valueSlug)
       const front = unit.frontSlug ? definitions.get(unit.frontSlug) : undefined
+      if (unit.frontSlug && !config.frontUnits) {
+        return `"${preset.name}" stands ${labelOf(unit.frontSlug)} in front of ${labelOf(unit.valueSlug)}, but this range is not set to stand units in front of one another. Switch "Units in front of other units" on, or take it out of the layout`
+      }
       if (unit.frontSlug && host && front && !(canHostFrontSpur(host) && canBeFrontSpur(front))) {
         return `"${preset.name}" stands ${labelOf(unit.frontSlug)} in front of ${labelOf(unit.valueSlug)}: only a straight unit with no back can stand in front, and only of a straight unit with one`
       }
     }
     const specs = presetLayoutUnits(preset, (slug) => (definitions.has(slug) ? slug : undefined)) ?? []
-    const problem = findChainProblem(chainFromUnits(specs, 'check-'), definitions, { maxPieces: config.maxPieces })
+    const problem = findChainProblem(chainFromUnits(specs, 'check-'), definitions, { maxPieces: config.maxPieces, frontUnits: config.frontUnits })
     if (problem) return `"${preset.name}" cannot be built: ${PRESET_PROBLEM_WORDING[problem]}`
   }
   return null
@@ -96,6 +99,7 @@ const PRESET_PROBLEM_WORDING: Record<NonNullable<ReturnType<typeof findChainProb
   'cannot-turn': 'it turns a unit that has a back',
   'piece-closed-on-joining-side': 'a unit is joined on to an arm',
   'neighbours-cannot-join': 'two neighbouring units meet arm to seat',
+  'front-units-not-offered': 'it stands a unit in front of another, which this range is not set to allow',
   'would-overlap': 'the units would sit on top of each other',
   'too-many-pieces': 'it has more units than the layout limit',
   'unknown-entry': 'it names a unit that is not set up',

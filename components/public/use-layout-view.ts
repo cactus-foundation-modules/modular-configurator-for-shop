@@ -118,7 +118,7 @@ export function useLayoutView(
     const labels = expanded.map((entry) => labelOf(entry.pieceId))
     const price = priceLayout(payload, storefront.pieceOptionId, draft.chain, layoutChoices, draft.unitChoices)
     const footprint = footprintOfLayout(placed)
-    const limits = { maxPieces: storefront.maxPieces }
+    const limits = { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits }
     const definitions = storefront.pieces.map((piece) => piece.definition)
 
     const definitionsById = new Map(definitions.map((definition) => [definition.pieceId, definition]))

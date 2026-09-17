@@ -18,6 +18,7 @@ const UNIT_OPTION = {
 
 const CONFIG: ConfiguratorConfig = {
   pieceOptionName: 'Unit',
+  frontUnits: true,
   maxPieces: 12,
   pieces: [
     { valueSlug: 'left-unit', shape: { kind: 'straight', closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760, modelTurnDegrees: 0 },
@@ -101,6 +102,33 @@ describe('checking a set-up before it is saved', () => {
         [UNIT_OPTION],
       ),
     ).toBe('"Backwards" cannot be built: two neighbouring units meet arm to seat')
+  })
+
+  it('lets a ready-made layout stand a unit in front only where the range is set to', () => {
+    // The range grown a backless cube, so standing one in front is possible;
+    // whether it is offered is the owner's choice, not the range's shape.
+    const withCube: ConfiguratorConfig = {
+      ...CONFIG,
+      pieces: [
+        ...CONFIG.pieces,
+        { valueSlug: 'cube', shape: { kind: 'straight', closedLeft: false, closedRight: false, backless: true }, widthMm: 660, depthMm: 520, modelTurnDegrees: 0 },
+      ],
+      presets: [{
+        name: 'Sofa with a cube',
+        valueSlugs: ['left-unit', 'central-unit', 'right-unit'],
+        units: [{ valueSlug: 'left-unit' }, { valueSlug: 'central-unit', frontSlug: 'cube' }, { valueSlug: 'right-unit' }],
+      }],
+    }
+    const option = { ...UNIT_OPTION, values: [...UNIT_OPTION.values, { slug: 'cube', label: 'Cube' }] }
+    expect(validateConfigAgainstOptions({ enabled: true, config: withCube }, [option])).toBeNull()
+    expect(validateConfigAgainstOptions({ enabled: true, config: { ...withCube, frontUnits: false } }, [option])).toBe(
+      '"Sofa with a cube" stands Cube in front of Central Unit, but this range is not set to stand units in front of one another. Switch "Units in front of other units" on, or take it out of the layout',
+    )
+  })
+
+  it('reads a set-up saved before the choice existed as not standing units in front', () => {
+    const { frontUnits: _dropped, ...beforeTheChoice } = CONFIG
+    expect(parseStoredConfig(beforeTheChoice).frontUnits).toBe(false)
   })
 
   it('reads a damaged stored row as not set up rather than breaking the page', () => {

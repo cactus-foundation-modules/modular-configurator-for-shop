@@ -3,6 +3,7 @@ import {
   addFrontSpur,
   candidatesAtEnd,
   candidatesInFront,
+  findChainProblem,
   frontSpaceKey,
   isSpaceKey,
   spaceOfKey,
@@ -23,7 +24,11 @@ const CUBE: PieceDefinition = { pieceId: 'cube', shape: { kind: 'straight', clos
 const CORNER: PieceDefinition = { pieceId: 'corner', shape: { kind: 'corner', backSide: 'left' }, widthMm: 660, depthMm: 660 }
 const RANGE = [CHAIR, CUBE, CORNER]
 const DEFINITIONS = new Map(RANGE.map((definition) => [definition.pieceId, definition]))
-const LIMITS = { maxPieces: 24 }
+// This range is set to stand a cube in front of a chair. A range that is not
+// gets no front spaces at all, however many backless units it has - see the
+// last block.
+const LIMITS = { maxPieces: 24, frontUnits: true }
+const NO_FRONT_UNITS = { maxPieces: 24 }
 
 function chainOf(...pieceIds: string[]): ChainEntry[] {
   return pieceIds.map((pieceId, index) => ({ entryId: `e${index}`, pieceId }))
@@ -72,7 +77,7 @@ describe('the space in front of a chair', () => {
 
   it('says the layout is full when it is', () => {
     const placed = placeLayout(chainOf('chair', 'chair'), DEFINITIONS)
-    expect(candidatesInFront(placed, 'e0', RANGE, { maxPieces: 2 }).map((candidate) => candidate.refusal)).toEqual(['too-many-pieces'])
+    expect(candidatesInFront(placed, 'e0', RANGE, { maxPieces: 2, frontUnits: true }).map((candidate) => candidate.refusal)).toEqual(['too-many-pieces'])
   })
 
   it('can cover the same floor as another in the crook of an L, and only one can be used', () => {
@@ -87,6 +92,33 @@ describe('the space in front of a chair', () => {
     expect(first.ok).toBe(true)
     if (!first.ok) return
     expect(addFrontSpur(first.chain, 'e2', { entryId: 's2', pieceId: 'cube' }, DEFINITIONS, LIMITS)).toEqual({ ok: false, refusal: 'would-overlap' })
+  })
+})
+
+describe('a range that does not stand units in front of one another', () => {
+  it('offers no space in front, even with a backless unit to put there', () => {
+    const placed = placeLayout(chainOf('chair', 'chair'), DEFINITIONS)
+    expect(candidatesInFront(placed, 'e0', RANGE, NO_FRONT_UNITS)).toEqual([])
+    expect(candidatesInFront(placed, 'e1', RANGE, NO_FRONT_UNITS)).toEqual([])
+  })
+
+  it('refuses one put there directly, and says why', () => {
+    expect(addFrontSpur(chainOf('chair', 'chair'), 'e0', { entryId: 's0', pieceId: 'cube' }, DEFINITIONS, NO_FRONT_UNITS)).toEqual({
+      ok: false,
+      refusal: 'front-units-not-offered',
+    })
+  })
+
+  it('refuses a whole layout written with one, so a saved set-up cannot smuggle it in', () => {
+    const chain = withCubeInFrontOf(chainOf('chair', 'chair'), 'e0')
+    expect(findChainProblem(chain, DEFINITIONS, NO_FRONT_UNITS)).toBe('front-units-not-offered')
+    expect(findChainProblem(chain, DEFINITIONS, LIMITS)).toBeNull()
+  })
+
+  it('still joins the same units in a row', () => {
+    const chairAtEnd = candidatesAtEnd(placeLayout(chainOf('chair', 'cube'), DEFINITIONS), 'end', RANGE, NO_FRONT_UNITS)
+      .find((candidate) => candidate.definition.pieceId === 'cube')
+    expect(chairAtEnd?.refusal).toBeNull()
   })
 })
 

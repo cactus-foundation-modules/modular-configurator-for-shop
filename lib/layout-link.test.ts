@@ -21,6 +21,7 @@ const TARGET_OPTIONS: TargetOption[] = [
 
 const CONFIG: ConfiguratorConfig = {
   pieceOptionName: 'Unit',
+  frontUnits: true,
   maxPieces: 12,
   presets: [],
   pieces: [

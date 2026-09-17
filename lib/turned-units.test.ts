@@ -117,6 +117,7 @@ describe('ready-made layouts with units in front and turned', () => {
   }
   const config = (presets: ConfiguratorConfig['presets']): ConfiguratorConfig => ({
     pieceOptionName: 'Unit',
+    frontUnits: true,
     maxPieces: 24,
     pieces: [CHAIR, CUBE, CORNER].map((definition) => ({
       valueSlug: definition.pieceId,

@@ -145,7 +145,10 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
             ...(unit.turned ? { turned: true } : {}),
           }
           if (unit.choices) unitChoices[entryId] = unit.choices
-          if (unit.front && definitions.has(unit.front.pieceId) && layoutPieceCount([...chain, entry]) < limits.maxPieces) {
+          // A layout written before the range stopped standing units in front
+          // of one another - a shared link, say - still opens: the unit in
+          // front is simply left off, rather than the whole layout refused.
+          if (limits.frontUnits === true && unit.front && definitions.has(unit.front.pieceId) && layoutPieceCount([...chain, entry]) < limits.maxPieces) {
             const spurId = entryIdFor(number)
             number += 1
             entry = { ...entry, frontSpur: { entryId: spurId, pieceId: unit.front.pieceId } }

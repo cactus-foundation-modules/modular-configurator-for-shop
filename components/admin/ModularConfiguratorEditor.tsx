@@ -206,6 +206,23 @@ export function ModularConfiguratorEditor({ productId }: { productId: string }) 
             />
           </label>
           <label style={{ display: 'grid', gap: '0.25rem' }}>
+            <span style={labelStyle}>
+              <input
+                type="checkbox"
+                checked={config.frontUnits}
+                onChange={(event) => changeConfig({ ...config, frontUnits: event.target.checked })}
+                style={{ marginRight: '0.5rem' }}
+              />
+              Units in front of other units
+            </span>
+            <p style={hintStyle}>
+              Lets shoppers stand a unit with no back on the seat front of a unit with one - a cube pulled up in front of a chair. Leave it off
+              unless the range is meant to be used that way: a range whose backless unit is a stool to stand beside the seats, not a cube to
+              stand in front of them, should not offer it. Only has any effect where the range has both a straight unit with a back and one
+              without.
+            </p>
+          </label>
+          <label style={{ display: 'grid', gap: '0.25rem' }}>
             <span style={labelStyle}>Layout summary over the view</span>
             <select
               style={fieldStyle}
@@ -234,6 +251,7 @@ export function ModularConfiguratorEditor({ productId }: { productId: string }) 
             pieces={config.pieces}
             labelBySlug={labelBySlug}
             maxPieces={config.maxPieces}
+            frontUnits={config.frontUnits}
             onChange={(presets) => changeConfig({ ...config, presets })}
           />
         </div>

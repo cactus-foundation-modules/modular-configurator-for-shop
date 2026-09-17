@@ -128,6 +128,15 @@ export const ConfiguratorConfigSchema = z.object({
   /** Name of the variation option whose values are the units (e.g. "Unit"). */
   pieceOptionName: z.string().trim().min(1).max(200),
   maxPieces: z.number().int().min(1).max(MAX_PIECES_CEILING),
+  /**
+   * Whether a backless unit may stand in front of a backed one. Having both
+   * kinds of straight unit in the range is what makes it possible, but not
+   * every range that can is meant to: a range whose backless unit is a stool
+   * to put beside the seats, not a cube to put in front of them, leaves this
+   * off. Absent on a set-up saved before the choice existed, which reads as
+   * off - a range that wants front units has to say so.
+   */
+  frontUnits: z.boolean().default(false),
   pieces: z.array(PieceConfigSchema).max(100),
   /** Owner-made starting layouts. Empty means the storefront suggests its own. */
   presets: z.array(PresetConfigSchema).max(12),
@@ -172,6 +181,7 @@ export type ConfiguratorConfig = z.infer<typeof ConfiguratorConfigSchema>
 export const EMPTY_CONFIGURATOR_CONFIG: ConfiguratorConfig = {
   pieceOptionName: '',
   maxPieces: DEFAULT_MAX_PIECES,
+  frontUnits: false,
   pieces: [],
   presets: [],
   viewSummary: 'always',

@@ -49,6 +49,8 @@ export type EditRefusal =
   | 'too-many-pieces'
   /** Two neighbours would meet arm to seat. */
   | 'neighbours-cannot-join'
+  /** This range does not stand units in front of one another. */
+  | 'front-units-not-offered'
   | 'unknown-entry'
   | 'unknown-piece'
 
@@ -69,6 +71,14 @@ export interface EndCandidate {
 
 export interface ChainLimits {
   maxPieces: number
+  /**
+   * Whether this range stands a backless unit in front of a backed one. Off
+   * (the default) in a range that has both kinds of straight unit but does not
+   * mean them to stack that way, so the shape of the range alone never decides
+   * it. Every path that could put one there reads this: the spaces offered, the
+   * edits themselves, and the check a whole chain is put through.
+   */
+  frontUnits?: boolean
 }
 
 /**
@@ -134,6 +144,7 @@ export function findChainProblem(
     if (previous && !canJoin(previous, definition)) return 'neighbours-cannot-join'
     if (entry.turned && !canBeTurned(definition)) return 'cannot-turn'
     if (entry.frontSpur) {
+      if (limits.frontUnits !== true) return 'front-units-not-offered'
       const spurDefinition = definitions.get(entry.frontSpur.pieceId)
       if (!spurDefinition) return 'unknown-piece'
       if (!canHostFrontSpur(definition) || !canBeFrontSpur(spurDefinition)) return 'would-overlap'
@@ -260,9 +271,10 @@ const ORIGIN_POSE: PiecePose = { centre: { x: 0, z: 0 }, rotationY: 0 }
 /**
  * Every backless type offered in front of one backed straight unit, each drawn
  * where it would stand and refused where it cannot (the layout is full, or it
- * would sit on another unit). Empty when the unit cannot take one at all: it has
- * a unit in front already, is not a backed straight, or the range has no
- * backless straight to offer.
+ * would sit on another unit). Empty when the unit cannot take one at all: the
+ * range does not stand units in front of one another, it has a unit in front
+ * already, it is not a backed straight, or the range has no backless straight
+ * to offer.
  */
 export function candidatesInFront(
   placed: readonly PlacedPiece[],
@@ -270,6 +282,7 @@ export function candidatesInFront(
   definitions: readonly PieceDefinition[],
   limits: ChainLimits,
 ): EndCandidate[] {
+  if (limits.frontUnits !== true) return []
   const host = placed.find((piece) => piece.entry.entryId === hostEntryId)
   if (!host || host.entry.frontSpur || !canHostFrontSpur(host.definition)) return []
   const chain = mainChainOf(placed)
@@ -343,6 +356,7 @@ export function addFrontSpur(
   definitions: ReadonlyMap<string, PieceDefinition>,
   limits: ChainLimits,
 ): EditResult {
+  if (limits.frontUnits !== true) return { ok: false, refusal: 'front-units-not-offered' }
   if (layoutPieceCount(chain) >= limits.maxPieces) return { ok: false, refusal: 'too-many-pieces' }
   const host = chain.find((entry) => entry.entryId === hostEntryId)
   if (!host) return { ok: false, refusal: 'unknown-entry' }

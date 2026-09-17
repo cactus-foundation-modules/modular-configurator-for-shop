@@ -293,7 +293,7 @@ function StartingLayoutRow({ layout, ownOptions, target, onChange }: {
         </div>
       </div>
       {layout.valueSlugs.length > 0 ? (
-        <PresetPreview units={slugUnits(layout.valueSlugs)} definitions={definitionsBySlug(target.config)} labelBySlug={labelBySlug} maxPieces={target.config.maxPieces} />
+        <PresetPreview units={slugUnits(layout.valueSlugs)} definitions={definitionsBySlug(target.config)} labelBySlug={labelBySlug} maxPieces={target.config.maxPieces} frontUnits={target.config.frontUnits} />
       ) : (
         <p style={hintStyle}>Add units to see it.</p>
       )}

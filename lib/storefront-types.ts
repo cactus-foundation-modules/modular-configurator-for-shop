@@ -50,6 +50,8 @@ export interface ConfiguratorStorefrontPayload {
   pieces: StorefrontPiece[]
   presets: StorefrontPreset[]
   maxPieces: number
+  /** Whether a backless unit may stand in front of a backed one in this range. */
+  frontUnits: boolean
   /** When the one-line summary sits over the layout view. */
   viewSummary: ViewSummaryChoice
   viewer: StorefrontViewerLook

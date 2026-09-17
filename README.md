@@ -46,8 +46,13 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
      model is turned. Leave that on **Work it out from each model**: supplier files face
      every which way, often differently from one variation to the next, and the builder
      turns each file to match the shape it was told the unit is (`lib/model-orientation.ts`);
+   - tick "Units in front of other units" (off by default) to let a backless unit stand on
+     the seat front of a backed one - having both kinds of straight unit makes it possible,
+     but only this setting offers it, so a range whose backless unit is a stool to stand
+     beside the seats rather than a cube to stand in front of them leaves it off;
    - optionally write ready-made layouts, with a backless unit stood in front of any straight
-     unit with a back, and a backless unit beside a corner turned to line up with the row.
+     unit with a back where that setting allows it, and a backless unit beside a corner
+     turned to line up with the row.
      A curve or wedge with no back can be laid the other way round in them too.
      With none, shoppers are offered a pair, a row
      of three, a curved sofa, an L, a U, a horseshoe, a serpentine, a booth, a round booth, a
@@ -132,8 +137,8 @@ the nearest combination it is made in, and its row says what it is in
   On a page with no gallery, the view is drawn in the tab instead and pins in the same place. The tab holds what can be added where
   and why not, the units in order, a panel for the selected unit (swap it, give it its own
   fabric, take it out, or turn a backless unit beside a corner to line up with the row),
-  dashed spaces in front of backed units where a range also has a backless one to stand
-  there, starting shapes, the layout's own options, undo, then the price
+  dashed spaces in front of backed units where the set-up allows units in front and the
+  range also has a backless one to stand there, starting shapes, the layout's own options, undo, then the price
   (styled like the individual tab's, with "Reset options" beside it to start again), the
   delivery choice in the basket's own box and chips - services every unit can have, dated
   by the unit arriving last, priced per item with the layout's total - and "Add layout to

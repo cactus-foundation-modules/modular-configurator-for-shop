@@ -241,7 +241,7 @@ export function LayoutWorkspace({
               const isFrontSpur = spurHostId !== null
               const frontSpurChoices =
                 !isFrontSpur && definition
-                  ? frontSpurOptions(draft.chain, unit.entry.entryId, [...definitions.values()], { maxPieces: storefront.maxPieces })
+                  ? frontSpurOptions(draft.chain, unit.entry.entryId, [...definitions.values()], { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })
                   : []
               return (
                 <li key={unit.entry.entryId} className="mcf-unit" data-selected={selected}>
@@ -268,7 +268,7 @@ export function LayoutWorkspace({
                     <div id={panelId} className="mcf-unit-body" ref={unitEditorRef}>
                       <UnitEditor
                         label={view.labels[index] ?? labelFor(unit.entry.pieceId)}
-                        swapTo={swapOptions(draft.chain, unit.entry.entryId, definitions, { maxPieces: storefront.maxPieces })}
+                        swapTo={swapOptions(draft.chain, unit.entry.entryId, definitions, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })}
                         labelFor={labelFor}
                         otherOptions={otherOptions}
                         layoutChoices={layoutChoices}
@@ -277,7 +277,7 @@ export function LayoutWorkspace({
                         adjustedOptionIds={unit.adjustedOptionIds}
                         onFlip={definition && isReversible(definition) && !isFrontSpur ? () => dispatch({ type: 'flip', entryId: unit.entry.entryId }) : undefined}
                         onTurn={
-                          !isFrontSpur && turnIsOffered(draft.chain, unit.entry.entryId, definitions, { maxPieces: storefront.maxPieces })
+                          !isFrontSpur && turnIsOffered(draft.chain, unit.entry.entryId, definitions, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })
                             ? () => dispatch({ type: 'turn', entryId: unit.entry.entryId })
                             : undefined
                         }

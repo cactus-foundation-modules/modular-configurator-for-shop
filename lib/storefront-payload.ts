@@ -74,6 +74,7 @@ export async function loadConfiguratorBlockData(slug: string): Promise<Configura
       pieces,
       presets: presetsFor(saved.config, catalogue.valueIdBySlug, pieces),
       maxPieces: saved.config.maxPieces,
+      frontUnits: saved.config.frontUnits,
       viewSummary: saved.config.viewSummary,
       viewer,
     },
@@ -91,7 +92,7 @@ function presetsFor(
   pieces: readonly StorefrontPiece[],
 ): StorefrontPreset[] {
   const definitions = new Map(pieces.map((piece) => [piece.pieceId, piece.definition]))
-  const limits = { maxPieces: config.maxPieces }
+  const limits = { maxPieces: config.maxPieces, frontUnits: config.frontUnits }
   if (config.presets.length === 0) return suggestPresets(pieces.map((piece) => piece.definition), limits)
   return config.presets.flatMap((preset) => {
     const units = presetLayoutUnits(preset, (slug) => {
