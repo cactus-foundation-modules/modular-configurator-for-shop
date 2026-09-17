@@ -97,6 +97,11 @@ const ANGLED_AZIMUTH = (28 * Math.PI) / 180
 const DIMENSION_OFFSET = 0.22
 const CLICK_SLOP_PX = 6
 const EASE_RATE = 9
+/** Height of the remove badge over a unit's middle, in metres. */
+const REMOVE_BADGE_HEIGHT = 0.48
+/** Where the remove badge moves to when a "+" is drawn over the same unit: up and towards its back. */
+const REMOVE_BADGE_CLEAR_HEIGHT = 0.86
+const REMOVE_BADGE_CLEAR_BACK_SHARE = 0.3
 
 function toMetres(millimetres: number): number {
   return millimetres / MILLIMETRES_PER_METRE
@@ -128,6 +133,7 @@ export class LayoutScene {
   private pointerDown: { x: number; y: number } | null = null
   private hoverRemoveBadge: Sprite | null = null
   private hoveredEntryId: string | null = null
+  private ghostFootprints: FloorRectangle[] = []
   private readonly removeListeners: Array<() => void> = []
 
   private constructor(
@@ -225,12 +231,15 @@ export class LayoutScene {
       this.frameLayout()
     }
     this.rebuildSelection()
+    this.placeRemoveBadge()
     this.needsRender = true
   }
 
   setGhosts(ghosts: readonly SceneGhost[]): void {
     this.clearGroup(this.ghostGroup)
     for (const ghost of ghosts) this.ghostGroup.add(this.buildGhost(ghost))
+    this.ghostFootprints = ghosts.map((ghost) => ghost.footprint)
+    this.placeRemoveBadge()
     this.needsRender = true
   }
 
@@ -408,7 +417,8 @@ export class LayoutScene {
     texture.colorSpace = three.SRGBColorSpace
     const sprite = new three.Sprite(new three.SpriteMaterial({ map: texture, depthTest: false, transparent: true }))
     sprite.scale.set(0.22, 0.22, 0.22)
-    sprite.renderOrder = 10
+    // Above the remove badge: where the two ever cross on screen, the "+" is the one showing.
+    sprite.renderOrder = 12
     return sprite
   }
 
@@ -460,9 +470,36 @@ export class LayoutScene {
     if (!slot) return
     if (!this.hoverRemoveBadge) this.hoverRemoveBadge = this.removeSprite()
     this.hoverRemoveBadge.userData.removeEntryId = entryId
-    this.hoverRemoveBadge.position.set(0, 0.48, 0)
     slot.holder.add(this.hoverRemoveBadge)
+    this.placeRemoveBadge()
     this.needsRender = true
+  }
+
+  /**
+   * Puts the remove badge over the middle of the hovered unit - unless a "+" is
+   * drawn over that unit too (the space inside an arm unit, where a new unit
+   * pushes the arm out), in which case the badge moves up and back so the two
+   * never sit on top of each other.
+   */
+  private placeRemoveBadge(): void {
+    const badge = this.hoverRemoveBadge
+    const slot = this.hoveredEntryId ? this.units.get(this.hoveredEntryId) : undefined
+    if (!badge || !slot) return
+    const { footprint } = slot
+    const plusOverUnit = this.ghostFootprints.some((ghost) => {
+      const x = (ghost.minX + ghost.maxX) / 2
+      const z = (ghost.minZ + ghost.maxZ) / 2
+      return x > footprint.minX && x < footprint.maxX && z > footprint.minZ && z < footprint.maxZ
+    })
+    if (!plusOverUnit) {
+      badge.position.set(0, REMOVE_BADGE_HEIGHT, 0)
+      return
+    }
+    // The holder turns with the unit, so its own back-to-front depth is whichever
+    // footprint side lies along its facing.
+    const sideways = Math.abs(Math.sin(slot.target.rotationY)) > 0.5
+    const depth = toMetres(sideways ? footprint.maxX - footprint.minX : footprint.maxZ - footprint.minZ)
+    badge.position.set(0, REMOVE_BADGE_CLEAR_HEIGHT, -depth * REMOVE_BADGE_CLEAR_BACK_SHARE)
   }
 
   private rebuildSelection(): void {
@@ -755,11 +792,12 @@ export class LayoutScene {
     const hits = raycaster
       .intersectObjects([...this.ghostGroup.children, ...holders], true)
       .filter((hit) => !(hit.object as Partial<Line>).isLine)
-    const removeEntryId = hits.map((candidate) => findUserData(candidate.object, 'removeEntryId')).find((id) => typeof id === 'string')
-    if (typeof removeEntryId === 'string') return { removeEntryId }
-    // The "+" badge is drawn over everything, so a tap on it is a tap on it even
-    // where a unit sits behind; otherwise the nearest thing under the pointer wins.
+    // The "+" badge is drawn over everything, the remove badge included, so a tap
+    // on it is a tap on it even where a unit or its remove badge sits behind;
+    // then the remove badge; otherwise the nearest thing under the pointer wins.
     const badge = hits.find((hit) => (hit.object as Partial<Sprite>).isSprite && findUserData(hit.object, 'ghostEnd'))
+    const removeEntryId = badge ? null : hits.map((candidate) => findUserData(candidate.object, 'removeEntryId')).find((id) => typeof id === 'string')
+    if (typeof removeEntryId === 'string') return { removeEntryId }
     const hit = badge ?? hits[0]
     if (!hit) return null
     const ghostEnd = findUserData(hit.object, 'ghostEnd')

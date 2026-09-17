@@ -340,42 +340,27 @@ function joinUsesSeatFront(previous: PieceDefinition, next: PieceDefinition): bo
   return seatFrontJoin(previous) && seatFrontJoin(next)
 }
 
-/** Front corner of a straight side face (left/right). */
-function straightSideFront(face: JoinFace, depthMm: number): FloorVector {
+/**
+ * The end of a straight's or corner's face furthest from its backrest: the back
+ * corner carried the whole length of the face towards the seat front. A side
+ * face runs the piece's depth; a corner's front face runs its width.
+ */
+function faceFrontEnd(face: JoinFace, definition: PieceDefinition): FloorVector {
+  const length = Math.abs(face.towardsFront.x) > 0.5 ? definition.widthMm : definition.depthMm
   return {
-    x: face.backCorner.x,
-    z: roundMillimetre(face.backCorner.z + face.towardsFront.z * depthMm),
+    x: roundMillimetre(face.backCorner.x + face.towardsFront.x * length),
+    z: roundMillimetre(face.backCorner.z + face.towardsFront.z * length),
   }
 }
 
 /**
- * Where on this face to glue. Backless straights always use their seat front;
- * backed straights use their front too when paired with a backless neighbour.
- * A corner's front-face entry meets a backless module at the backless seat depth,
- * not the corner's own deeper front edge.
+ * The point on a face that meets the neighbour's, in the piece's own frame. A
+ * seat-front join lines up the front ends of the two faces, so the shallower
+ * backless unit sits flush with its neighbour's front - along a straight run,
+ * and against either open side of a corner, whichever way that side faces.
  */
-/** Join anchor on one face, in that piece's own frame (before rotation). */
-function joinAnchorLocal(
-  face: JoinFace,
-  definition: PieceDefinition,
-  seatFront: boolean,
-  mate: PieceDefinition,
-): FloorVector {
-  if (!seatFront) return face.backCorner
-  if (definition.shape.kind === 'straight') return straightSideFront(face, definition.depthMm)
-  if (definition.shape.kind === 'corner' && isStraightBackless(mate)) {
-    if (Math.abs(face.outward.z) > 0.5) {
-      const inset = (definition.depthMm - mate.depthMm) / 2
-      return {
-        x: roundMillimetre(face.backCorner.x - face.outward.x * inset),
-        z: roundMillimetre(face.backCorner.z - face.outward.z * inset),
-      }
-    }
-    if (Math.abs(face.outward.x) > 0.5) {
-      return face.backCorner
-    }
-  }
-  return face.backCorner
+function joinAnchorLocal(face: JoinFace, definition: PieceDefinition, seatFront: boolean): FloorVector {
+  return seatFront ? faceFrontEnd(face, definition) : face.backCorner
 }
 
 function joinAnchorWorld(
@@ -383,9 +368,8 @@ function joinAnchorWorld(
   definition: PieceDefinition,
   pose: PiecePose,
   seatFront: boolean,
-  mate: PieceDefinition,
 ): FloorVector {
-  const local = joinAnchorLocal(localFace, definition, seatFront, mate)
+  const local = joinAnchorLocal(localFace, definition, seatFront)
   const rotated = rotateOnFloor(local, pose.rotationY)
   return {
     x: roundMillimetre(rotated.x + pose.centre.x),
@@ -407,7 +391,8 @@ function transformFace(face: JoinFace, pose: PiecePose): JoinFace {
 
 /**
  * Pose that glues `definition`'s entry face onto `previousExit` (world frame):
- * faces back to back, back ends touching, fronts running the same way.
+ * faces back to back, back ends touching (front ends, for a seat-front join),
+ * fronts running the same way.
  */
 function poseJoinedAfter(
   previous: PlacedPiece,
@@ -418,27 +403,14 @@ function poseJoinedAfter(
   const previousExit = transformFace(previousLocalExit, previous.pose)
   const seatFront = joinUsesSeatFront(previous.definition, definition)
   const entry = entryFaceOf(definition, flipped)
-  const previousAnchor = joinAnchorWorld(previousLocalExit, previous.definition, previous.pose, seatFront, definition)
-  const entryAnchor = joinAnchorLocal(entry, definition, seatFront, previous.definition)
+  const previousAnchor = joinAnchorWorld(previousLocalExit, previous.definition, previous.pose, seatFront)
+  const entryAnchor = joinAnchorLocal(entry, definition, seatFront)
   const facingBack = { x: -previousExit.outward.x, z: -previousExit.outward.z }
   const rotationY = snapToQuarterTurn(headingOf(facingBack) - headingOf(entry.outward))
   const rotatedAnchor = rotateOnFloor(entryAnchor, rotationY)
-  let centre: FloorVector = {
+  const centre: FloorVector = {
     x: roundMillimetre(previousAnchor.x - rotatedAnchor.x),
     z: roundMillimetre(previousAnchor.z - rotatedAnchor.z),
-  }
-  // Side exit from a corner into a backless module: the back join leaves the
-  // cube a full corner depth too far back; its seat front should match the run.
-  if (
-    seatFront &&
-    isStraightBackless(definition) &&
-    previous.definition.shape.kind === 'corner' &&
-    Math.abs(previousLocalExit.outward.x) > 0.5
-  ) {
-    centre = {
-      x: centre.x,
-      z: roundMillimetre(previous.pose.centre.z - previous.definition.depthMm),
-    }
   }
   return { centre, rotationY }
 }

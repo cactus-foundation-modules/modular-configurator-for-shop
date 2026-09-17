@@ -3,6 +3,7 @@ import {
   anchorLayout,
   layoutBounds,
   placeChain,
+  piecesOverlap,
   placeLayout,
   type ChainEntry,
   type PieceDefinition,
@@ -178,24 +179,62 @@ describe('a backless cube in front of a backed seat', () => {
   })
 })
 
-describe('backless modules on a corner preset', () => {
+describe('backless modules either side of a corner', () => {
+  // A leather reception range: a 660 square backed chair and corner, and a
+  // shallower 520 deep backless cube.
   const BACKLESS: PieceDefinition = {
     pieceId: 'backless',
     shape: { kind: 'straight', closedLeft: false, closedRight: false, backless: true },
     widthMm: 660,
     depthMm: 520,
   }
-  const CORNER: PieceDefinition = { pieceId: 'corner', shape: { kind: 'corner', backSide: 'left' }, widthMm: 660, depthMm: 660 }
-  const DEFINITIONS = new Map([BACKLESS, CORNER].map((definition) => [definition.pieceId, definition]))
+  const BACKED: PieceDefinition = { pieceId: 'backed', shape: { kind: 'straight', closedLeft: false, closedRight: false }, widthMm: 660, depthMm: 660 }
+  const CORNER_LEFT: PieceDefinition = { pieceId: 'corner', shape: { kind: 'corner', backSide: 'left' }, widthMm: 660, depthMm: 660 }
+  const CORNER_RIGHT: PieceDefinition = { ...CORNER_LEFT, shape: { kind: 'corner', backSide: 'right' } }
+  const definitionsWithCorner = (corner: PieceDefinition) =>
+    new Map([BACKLESS, BACKED, corner].map((definition) => [definition.pieceId, definition]))
 
-  it('lines each cube up with the corner seat front, not its back edge', () => {
-    const placed = placeChain(chainOf('backless', 'corner', 'backless'), DEFINITIONS)
+  it('builds an L, each cube flush with the corner front it sits beside', () => {
+    const placed = placeChain(chainOf('backless', 'corner', 'backless'), definitionsWithCorner(CORNER_LEFT))
     const first = pieceAt(placed, 0)
     const corner = pieceAt(placed, 1)
     const last = pieceAt(placed, 2)
-    expect(first.footprint.maxZ).toBe(260)
-    expect(corner.footprint.minZ).toBe(260)
-    expect(last.footprint.minX).toBe(corner.footprint.maxX)
-    expect(last.footprint.maxZ).toBe(first.footprint.maxZ)
+    // First run: the corner closes it on the right, fronts level, backs not.
+    expect(first.footprint).toEqual({ minX: -330, maxX: 330, minZ: -260, maxZ: 260 })
+    expect(corner.footprint).toEqual({ minX: 330, maxX: 990, minZ: -400, maxZ: 260 })
+    // Second run: out of the corner's open front, facing back into the L, so its
+    // front is its low x edge, level with the corner's inside edge.
+    expect(last.pose.rotationY).toBeCloseTo(-Math.PI / 2)
+    expect(last.footprint).toEqual({ minX: 330, maxX: 850, minZ: 260, maxZ: 920 })
+    expect(placed.some((piece, index) => placed.slice(index + 1).some((other) => piecesOverlap(piece, other)))).toBe(false)
+  })
+
+  it('builds the same L whichever side the corner carries its second back', () => {
+    const withBackLeft = placeChain(chainOf('backless', 'corner', 'backless'), definitionsWithCorner(CORNER_LEFT))
+    const withBackRight = placeChain(chainOf('backless', 'corner', 'backless'), definitionsWithCorner(CORNER_RIGHT))
+    expect(withBackRight.map((piece) => piece.footprint)).toEqual(withBackLeft.map((piece) => piece.footprint))
+  })
+
+  it('puts a backed chair after a cube back in line with the corner', () => {
+    const placed = placeChain(chainOf('backed', 'corner', 'backless', 'backed'), definitionsWithCorner(CORNER_LEFT))
+    const corner = pieceAt(placed, 1)
+    const cube = pieceAt(placed, 2)
+    const chair = pieceAt(placed, 3)
+    // Backed chair and corner meet back to back, as they always have.
+    expect(corner.footprint).toEqual({ minX: 330, maxX: 990, minZ: -330, maxZ: 330 })
+    expect(cube.footprint).toEqual({ minX: 330, maxX: 850, minZ: 330, maxZ: 990 })
+    expect(chair.footprint).toEqual({ minX: 330, maxX: 990, minZ: 990, maxZ: 1650 })
+  })
+})
+
+describe('backless modules beside each other', () => {
+  // A stool range where nothing has a back: rows keep meeting on the back edge.
+  const SMALL: PieceDefinition = { pieceId: 'small', shape: { kind: 'straight', closedLeft: false, closedRight: false, backless: true }, widthMm: 450, depthMm: 450 }
+  const LARGE: PieceDefinition = { pieceId: 'large', shape: { kind: 'straight', closedLeft: false, closedRight: false, backless: true }, widthMm: 950, depthMm: 950 }
+  const DEFINITIONS = new Map([SMALL, LARGE].map((definition) => [definition.pieceId, definition]))
+
+  it('lines their back edges up', () => {
+    const placed = placeChain(chainOf('large', 'small', 'large'), DEFINITIONS)
+    expect(placed.map((piece) => piece.footprint.minZ)).toEqual([-475, -475, -475])
   })
 })
