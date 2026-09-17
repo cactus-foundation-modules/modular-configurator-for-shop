@@ -195,7 +195,7 @@ describe('backless modules on a corner preset', () => {
     const last = pieceAt(placed, 2)
     expect(first.footprint.maxZ).toBe(260)
     expect(corner.footprint.minZ).toBe(260)
-    expect(last.footprint.minZ).toBe(260)
     expect(last.footprint.minX).toBe(corner.footprint.maxX)
+    expect(last.footprint.maxZ).toBe(first.footprint.maxZ)
   })
 })

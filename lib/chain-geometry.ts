@@ -354,7 +354,8 @@ function straightSideFront(face: JoinFace, depthMm: number): FloorVector {
  * A corner's front-face entry meets a backless module at the backless seat depth,
  * not the corner's own deeper front edge.
  */
-function joinAnchorOnFace(
+/** Join anchor on one face, in that piece's own frame (before rotation). */
+function joinAnchorLocal(
   face: JoinFace,
   definition: PieceDefinition,
   seatFront: boolean,
@@ -362,11 +363,34 @@ function joinAnchorOnFace(
 ): FloorVector {
   if (!seatFront) return face.backCorner
   if (definition.shape.kind === 'straight') return straightSideFront(face, definition.depthMm)
-  if (definition.shape.kind === 'corner' && isStraightBackless(mate) && Math.abs(face.towardsFront.z) < 0.5) {
-    const sign = face.backCorner.z === 0 ? 1 : Math.sign(face.backCorner.z)
-    return { x: face.backCorner.x, z: roundMillimetre((sign * mate.depthMm) / 2) }
+  if (definition.shape.kind === 'corner' && isStraightBackless(mate)) {
+    if (Math.abs(face.outward.z) > 0.5) {
+      const inset = (definition.depthMm - mate.depthMm) / 2
+      return {
+        x: roundMillimetre(face.backCorner.x - face.outward.x * inset),
+        z: roundMillimetre(face.backCorner.z - face.outward.z * inset),
+      }
+    }
+    if (Math.abs(face.outward.x) > 0.5) {
+      return face.backCorner
+    }
   }
   return face.backCorner
+}
+
+function joinAnchorWorld(
+  localFace: JoinFace,
+  definition: PieceDefinition,
+  pose: PiecePose,
+  seatFront: boolean,
+  mate: PieceDefinition,
+): FloorVector {
+  const local = joinAnchorLocal(localFace, definition, seatFront, mate)
+  const rotated = rotateOnFloor(local, pose.rotationY)
+  return {
+    x: roundMillimetre(rotated.x + pose.centre.x),
+    z: roundMillimetre(rotated.z + pose.centre.z),
+  }
 }
 
 function transformFace(face: JoinFace, pose: PiecePose): JoinFace {
@@ -386,25 +410,37 @@ function transformFace(face: JoinFace, pose: PiecePose): JoinFace {
  * faces back to back, back ends touching, fronts running the same way.
  */
 function poseJoinedAfter(
-  previousExit: JoinFace,
-  previousDefinition: PieceDefinition,
+  previous: PlacedPiece,
   definition: PieceDefinition,
   flipped: boolean | undefined,
 ): PiecePose {
-  const seatFront = joinUsesSeatFront(previousDefinition, definition)
+  const previousLocalExit = exitFaceOf(previous.definition, previous.entry.flipped)
+  const previousExit = transformFace(previousLocalExit, previous.pose)
+  const seatFront = joinUsesSeatFront(previous.definition, definition)
   const entry = entryFaceOf(definition, flipped)
-  const previousAnchor = joinAnchorOnFace(previousExit, previousDefinition, seatFront, definition)
-  const entryAnchor = joinAnchorOnFace(entry, definition, seatFront, previousDefinition)
+  const previousAnchor = joinAnchorWorld(previousLocalExit, previous.definition, previous.pose, seatFront, definition)
+  const entryAnchor = joinAnchorLocal(entry, definition, seatFront, previous.definition)
   const facingBack = { x: -previousExit.outward.x, z: -previousExit.outward.z }
   const rotationY = snapToQuarterTurn(headingOf(facingBack) - headingOf(entry.outward))
   const rotatedAnchor = rotateOnFloor(entryAnchor, rotationY)
-  return {
-    centre: {
-      x: roundMillimetre(previousAnchor.x - rotatedAnchor.x),
-      z: roundMillimetre(previousAnchor.z - rotatedAnchor.z),
-    },
-    rotationY,
+  let centre: FloorVector = {
+    x: roundMillimetre(previousAnchor.x - rotatedAnchor.x),
+    z: roundMillimetre(previousAnchor.z - rotatedAnchor.z),
   }
+  // Side exit from a corner into a backless module: the back join leaves the
+  // cube a full corner depth too far back; its seat front should match the run.
+  if (
+    seatFront &&
+    isStraightBackless(definition) &&
+    previous.definition.shape.kind === 'corner' &&
+    Math.abs(previousLocalExit.outward.x) > 0.5
+  ) {
+    centre = {
+      x: centre.x,
+      z: roundMillimetre(previous.pose.centre.z - previous.definition.depthMm),
+    }
+  }
+  return { centre, rotationY }
 }
 
 export function footprintAt(definition: PieceDefinition, pose: PiecePose): FloorRectangle {
@@ -433,17 +469,14 @@ export function placeChain(
   definitions: ReadonlyMap<string, PieceDefinition>,
 ): PlacedPiece[] {
   const placed: PlacedPiece[] = []
-  let previousExit: JoinFace | null = null
-  let previousDefinition: PieceDefinition | null = null
   for (const entry of chain) {
     const definition = definitions.get(entry.pieceId)
     if (!definition) throw new UnknownPieceError(entry.pieceId)
-    const pose: PiecePose = previousExit && previousDefinition
-      ? poseJoinedAfter(previousExit, previousDefinition, definition, entry.flipped)
+    const previous = placed[placed.length - 1]
+    const pose: PiecePose = previous
+      ? poseJoinedAfter(previous, definition, entry.flipped)
       : { centre: { x: 0, z: 0 }, rotationY: 0 }
     placed.push({ entry, definition, pose, footprint: footprintAt(definition, pose) })
-    previousExit = transformFace(exitFaceOf(definition, entry.flipped), pose)
-    previousDefinition = definition
   }
   return placed
 }
