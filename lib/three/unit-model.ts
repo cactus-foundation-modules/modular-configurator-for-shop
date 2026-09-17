@@ -122,6 +122,11 @@ async function standOnFootprint(model: Object3D, piece: StorefrontPiece, flipped
   // flush with its neighbour's front is already placed there by the layout
   // maths, so nudging the model forward here would count the flush twice.
   turned.position.set(-centre.x, -fitted.min.y, -centre.z)
+  const { shape } = piece.definition
+  if (shape.kind === 'straight' && shape.backless) {
+    const halfDepth = piece.definition.depthMm / MILLIMETRES_PER_METRE / 2
+    turned.position.z += halfDepth - fitted.max.z
+  }
 
   turned.traverse((child) => {
     const mesh = child as Partial<Mesh>
