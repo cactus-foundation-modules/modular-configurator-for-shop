@@ -11,7 +11,8 @@
 // thumbnail says it is there to host the view. Nothing here decides anything -
 // it only carries state between islands that cannot pass props to each other.
 import { useSyncExternalStore } from 'react'
-import type { ChainEnd, PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import type { PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import type { SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import type { ProductTab } from '@/modules/modular-configurator-for-shop/lib/opening-tab'
 import type { StorefrontPiece, StorefrontViewerLook } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import type { PlanGhost } from '@/modules/modular-configurator-for-shop/components/public/LayoutPlan'
@@ -33,11 +34,13 @@ export interface LayoutStageSnapshot {
   depthText: string
   /** "L-shape · 5 units · 2.21 m wide × 2.21 m deep", or a prompt while empty. */
   summaryText: string
+  /** The set-up keeps the summary to while Sizes is on, and off phones. The empty-layout prompt always shows. */
+  summaryWithSizesOnly: boolean
   arrangementText: string
   isEmpty: boolean
   labelFor: (pieceId: string) => string
   onSelectUnit: (entryId: string | null) => void
-  onPickGhost: (end: ChainEnd) => void
+  onPickGhost: (key: SpaceKey) => void
   onRemoveUnit: (entryId: string) => void
 }
 

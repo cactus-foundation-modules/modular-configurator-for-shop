@@ -24,7 +24,14 @@ export function LayoutStageView({ snapshot, fill }: LayoutStageViewProps) {
   const [viewChoice, setViewChoice] = useState<ViewChoice>('3d')
   const [showDimensions, setShowDimensions] = useState(true)
   const [unitsLoading, setUnitsLoading] = useState(0)
-  const sceneGhosts = useMemo(() => snapshot.ghosts.map(({ end, footprint }) => ({ end, footprint })), [snapshot.ghosts])
+  const sceneGhosts = useMemo(() => snapshot.ghosts.map(({ key, footprint }) => ({ key, footprint })), [snapshot.ghosts])
+  // "Bringing the units in…" always shows while models load. The summary follows
+  // the set-up: where it is kept to Sizes, it goes with Sizes and stays off phones
+  // (hide-mobile is core's utility, on the site's own phone breakpoint).
+  const loadingText = unitsLoading > 0 && viewChoice === '3d' ? 'Bringing the units in…' : null
+  const summaryShown = !snapshot.summaryWithSizesOnly || showDimensions
+  const captionText = loadingText ?? (summaryShown ? snapshot.summaryText : null)
+  const captionClass = loadingText === null && snapshot.summaryWithSizesOnly ? 'mcf-stage-caption hide-mobile' : 'mcf-stage-caption'
 
   return (
     <div className={fill ? 'mcf-stage mcf-stage--fill' : 'mcf-stage'} data-cactus-unstyled="">
@@ -72,8 +79,8 @@ export function LayoutStageView({ snapshot, fill }: LayoutStageViewProps) {
           Sizes
         </button>
       </div>
-      <p className="mcf-stage-caption" aria-live="polite">
-        {unitsLoading > 0 && viewChoice === '3d' ? 'Bringing the units in…' : snapshot.summaryText}
+      <p className={captionClass} aria-live="polite" hidden={captionText === null}>
+        {captionText}
       </p>
     </div>
   )

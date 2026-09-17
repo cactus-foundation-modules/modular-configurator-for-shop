@@ -118,12 +118,10 @@ async function standOnFootprint(model: Object3D, piece: StorefrontPiece, flipped
 
   const fitted = new Box3().setFromObject(turned, true)
   const centre = fitted.getCenter(new Vector3())
+  // Centred on the footprint like every other unit. A backless unit that sits
+  // flush with its neighbour's front is already placed there by the layout
+  // maths, so nudging the model forward here would count the flush twice.
   turned.position.set(-centre.x, -fitted.min.y, -centre.z)
-  const { shape } = piece.definition
-  if (shape.kind === 'straight' && shape.backless) {
-    const halfDepth = piece.definition.depthMm / MILLIMETRES_PER_METRE / 2
-    turned.position.z += halfDepth - fitted.max.z
-  }
 
   turned.traverse((child) => {
     const mesh = child as Partial<Mesh>

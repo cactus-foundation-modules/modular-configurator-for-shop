@@ -12,14 +12,16 @@
 // LayoutBuilder.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatMoney } from '@/modules/shop/lib/money'
-import { frontSpurOptions, hostEntryIdForSpur, swapOptions } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { TaxViewMoney, TaxViewNote } from '@/modules/shop/components/public/TaxViewText'
+import { TaxViewToggle } from '@/modules/shop/components/public/TaxViewToggle'
+import type { ProductTaxView } from '@/modules/shop/lib/tax-view-shared'
+import { frontSpurOptions, hostEntryIdForSpur, swapOptions, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { layoutValueReachesAUnit, priceLayout, unitIsMadeIn } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { refusalSentence, unitProblemSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
 import type { ConfiguratorStorefrontPayload } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import type { OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
 import type { VariantSelectorPayload } from '@/modules/shop-variations/lib/types'
-import type { ChainEnd } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { LayoutStageSnapshot } from '@/modules/modular-configurator-for-shop/components/public/layout-stage-store'
 import { LayoutStageView } from '@/modules/modular-configurator-for-shop/components/public/LayoutStageView'
 import { OptionChoices } from '@/modules/modular-configurator-for-shop/components/public/OptionChoices'
@@ -29,7 +31,7 @@ import { LayoutDeliveryPicker } from '@/modules/modular-configurator-for-shop/co
 import { useLayoutDelivery } from '@/modules/modular-configurator-for-shop/components/public/use-layout-delivery'
 import { deliveryLinesFor } from '@/modules/modular-configurator-for-shop/lib/layout-delivery'
 import type { useLayoutBuilder } from '@/modules/modular-configurator-for-shop/components/public/use-layout-builder'
-import { otherOptionsOf, pieceLookup, type LayoutView } from '@/modules/modular-configurator-for-shop/components/public/use-layout-view'
+import { otherOptionsOf, pieceLookup, spaceViewFor, type LayoutView } from '@/modules/modular-configurator-for-shop/components/public/use-layout-view'
 import { OPTIONS_AREA_CLASS, useStickyMobileGallery } from '@/modules/shop-variations/lib/use-sticky-mobile-gallery'
 
 type LayoutBuilderState = ReturnType<typeof useLayoutBuilder>
@@ -39,15 +41,17 @@ interface LayoutWorkspaceProps {
   payload: VariantSelectorPayload
   currencySymbol: string
   priceSuffix: string
+  /** The shopper's with/without VAT switch, or null where the shop has it off. */
+  taxView: ProductTaxView | null
   builder: LayoutBuilderState
   view: LayoutView
   snapshot: LayoutStageSnapshot
   /** True when the product gallery is showing the layout, so no view is drawn here. */
   viewInGallery: boolean
-  pickerEnd: ChainEnd | null
-  onOpenPicker: (end: ChainEnd) => void
+  pickerSpace: SpaceKey | null
+  onOpenPicker: (key: SpaceKey) => void
   onClosePicker: () => void
-  onAddUnit: (end: ChainEnd, pieceId: string) => void
+  onAddUnit: (key: SpaceKey, pieceId: string) => void
   onSelectUnit: (entryId: string | null) => void
   layoutChoices: OptionSelection
   statusText: string | null
@@ -67,11 +71,12 @@ export function LayoutWorkspace({
   payload,
   currencySymbol,
   priceSuffix,
+  taxView,
   builder,
   view,
   snapshot,
   viewInGallery,
-  pickerEnd,
+  pickerSpace,
   onOpenPicker,
   onClosePicker,
   onAddUnit,
@@ -98,12 +103,15 @@ export function LayoutWorkspace({
   const otherOptions = useMemo(() => otherOptionsOf(payload, storefront.pieceOptionId), [payload, storefront.pieceOptionId])
   const labelFor = (pieceId: string) => pieceById.get(pieceId)?.label ?? 'Unit'
   const money = (amount: number) => formatMoney(amount, currencySymbol)
+  // A price that follows the shopper's VAT switch where the shop has one on, and
+  // prints exactly as `money` does where it has not.
+  const figure = (amount: number) => <TaxViewMoney amount={amount} view={taxView} format={money} />
 
   // A space tapped in the gallery opens its list down here, possibly out of
   // sight on a phone - so bring it into view whenever one opens.
   useEffect(() => {
-    if (pickerEnd) pickerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [pickerEnd])
+    if (pickerSpace) pickerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [pickerSpace])
   // Likewise a unit tapped in the gallery: its panel is down here.
   useEffect(() => {
     if (selectedEntryId) unitEditorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -132,8 +140,8 @@ export function LayoutWorkspace({
   )
 
   // An empty layout has only one thing to do next, so its list is simply open.
-  const openEnd = pickerEnd ?? (isEmpty ? 'end' : null)
-  const pickerView = openEnd ? view.ends[openEnd] : null
+  const openSpace = pickerSpace ?? (isEmpty ? 'end' : null)
+  const pickerView = openSpace ? spaceViewFor(view, openSpace) : null
   const firstProblem = view.price.units.find((unit) => unit.problem !== null)
   const addBlockedBecause = isEmpty
     ? 'Add a unit to start'
@@ -162,7 +170,7 @@ export function LayoutWorkspace({
           </div>
         ) : null}
 
-        {pickerView && openEnd ? (
+        {pickerView && openSpace ? (
           <div ref={pickerRef}>
             <PiecePicker
               heading={isEmpty ? 'Choose your first unit' : `Add a unit ${pickerView.besideText}`}
@@ -170,8 +178,9 @@ export function LayoutWorkspace({
               labelFor={labelFor}
               priceFor={priceOfPieceAlone}
               currencySymbol={currencySymbol}
+              taxView={taxView}
               maxPieces={storefront.maxPieces}
-              onPick={(pieceId) => onAddUnit(openEnd, pieceId)}
+              onPick={(pieceId) => onAddUnit(openSpace, pieceId)}
               onCancel={isEmpty ? undefined : onClosePicker}
             />
           </div>
@@ -197,11 +206,11 @@ export function LayoutWorkspace({
             <div className="mcf-row">
               {snapshot.ghosts.map((ghost) => (
                 <button
-                  key={ghost.end}
+                  key={ghost.key}
                   type="button"
                   className="mcf-chip"
-                  aria-pressed={pickerEnd === ghost.end}
-                  onClick={() => onOpenPicker(ghost.end)}
+                  aria-pressed={pickerSpace === ghost.key}
+                  onClick={() => onOpenPicker(ghost.key)}
                 >
                   + {ghost.label}
                 </button>
@@ -248,7 +257,7 @@ export function LayoutWorkspace({
                       <span className="mcf-unit-detail">In {ownLabels.join(', ')}</span>
                     ) : null}
                   </button>
-                  <span className="mcf-unit-price">{unit.variant ? money(unit.variant.price) : ''}</span>
+                  <span className="mcf-unit-price">{unit.variant ? figure(unit.variant.price) : ''}</span>
                   {selected ? (
                     // The selected unit opens in place, in the list, wherever it was chosen from.
                     <div id={panelId} className="mcf-unit-body" ref={unitEditorRef}>
@@ -265,7 +274,7 @@ export function LayoutWorkspace({
                         frontSpurTo={frontSpurChoices}
                         onAddFrontSpur={
                           frontSpurChoices.length > 0
-                            ? (pieceId) => dispatch({ type: 'add-front-spur', hostEntryId: unit.entry.entryId, pieceId })
+                            ? (pieceId) => dispatch({ type: 'add-front-spur', hostEntryId: unit.entry.entryId, pieceId, select: true })
                             : undefined
                         }
                         isMadeIn={(optionId, valueId) => unitIsMadeIn(payload, storefront.pieceOptionId, unit.entry.pieceId, optionId, valueId, own)}
@@ -308,14 +317,17 @@ export function LayoutWorkspace({
 
         <div className="mcf-ws-foot">
           <div className="mcf-price-block">
-            <span className="mcf-price-now">{money(view.price.total * layoutQuantity)}</span>
+            <span className="mcf-price-now">{figure(view.price.total * layoutQuantity)}</span>
+            {/* The tax wording straight after the figure it describes, with the
+                shopper's switch beside it where the shop has one on. */}
+            <TaxViewNote view={taxView} suffix={priceSuffix} className="mcf-price-note" />
+            <TaxViewToggle view={taxView} />
             {view.price.compareAtTotal !== null ? (
-              <span className="mcf-price-was">{money(view.price.compareAtTotal * layoutQuantity)}</span>
+              <span className="mcf-price-was">{figure(view.price.compareAtTotal * layoutQuantity)}</span>
             ) : null}
             {view.price.retailTotal !== null ? (
-              <span className="mcf-price-rrp">RRP {money(view.price.retailTotal * layoutQuantity)}</span>
+              <span className="mcf-price-rrp">RRP {figure(view.price.retailTotal * layoutQuantity)}</span>
             ) : null}
-            {priceSuffix ? <span className="mcf-price-note">{priceSuffix}</span> : null}
             <button type="button" className="mcf-reset" onClick={onReset}>
               Reset options
             </button>
@@ -326,6 +338,7 @@ export function LayoutWorkspace({
               itemCount={view.price.units.length * layoutQuantity}
               layoutQuantity={layoutQuantity}
               currencySymbol={currencySymbol}
+              taxView={taxView}
               onChange={setDeliveryChoice}
             />
           ) : null}

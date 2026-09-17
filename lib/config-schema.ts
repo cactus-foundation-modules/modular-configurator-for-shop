@@ -15,6 +15,14 @@ export const MAX_UNIT_SIDE_MM = 6000
 export const MAX_PIECES_CEILING = 30
 export const DEFAULT_MAX_PIECES = 12
 
+/**
+ * When the one-line summary ("L-shape · 3 units · 1.98 m wide × 0.66 m deep")
+ * sits over the layout view: always, or only while Sizes is switched on and
+ * never at the site's phone width.
+ */
+export const VIEW_SUMMARY_CHOICES = ['always', 'with-sizes'] as const
+export type ViewSummaryChoice = (typeof VIEW_SUMMARY_CHOICES)[number]
+
 const StraightShapeSchema = z.object({
   kind: z.literal('straight'),
   closedLeft: z.boolean(),
@@ -81,6 +89,8 @@ export const ConfiguratorConfigSchema = z.object({
   pieces: z.array(PieceConfigSchema).max(100),
   /** Owner-made starting layouts. Empty means the storefront suggests its own. */
   presets: z.array(PresetConfigSchema).max(12),
+  /** Absent on a set-up saved before the choice existed, which keeps the summary showing. */
+  viewSummary: z.enum(VIEW_SUMMARY_CHOICES).default('always'),
 })
 
 export type PieceShapeConfig = z.infer<typeof PieceShapeSchema>
@@ -93,6 +103,7 @@ export const EMPTY_CONFIGURATOR_CONFIG: ConfiguratorConfig = {
   maxPieces: DEFAULT_MAX_PIECES,
   pieces: [],
   presets: [],
+  viewSummary: 'always',
 }
 
 /**

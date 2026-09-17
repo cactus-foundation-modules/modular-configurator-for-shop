@@ -26,6 +26,7 @@ const CONFIG: ConfiguratorConfig = {
     { valueSlug: 'corner-unit', shape: { kind: 'corner', backSide: 'left' }, widthMm: 760, depthMm: 760, modelTurnDegrees: 0 },
   ],
   presets: [{ name: 'Corner sofa', valueSlugs: ['left-unit', 'corner-unit', 'right-unit'] }],
+  viewSummary: 'always',
 }
 
 describe('reading sizes from a specification', () => {
@@ -112,6 +113,12 @@ describe('checking a set-up before it is saved', () => {
     const { modelTurnDegrees: _dropped, ...withoutTurn } = left ?? CONFIG.pieces[0]!
     const stored = parseStoredConfig({ ...CONFIG, pieces: [withoutTurn, ...rest] })
     expect(stored.pieces.map((piece) => piece.modelTurnDegrees)).toEqual(['auto', 0, 0, 0])
+  })
+
+  it('keeps the view summary showing for a set-up saved before the choice existed', () => {
+    const { viewSummary: _dropped, ...saved } = CONFIG
+    expect(parseStoredConfig(saved).viewSummary).toBe('always')
+    expect(parseStoredConfig({ ...CONFIG, viewSummary: 'with-sizes' }).viewSummary).toBe('with-sizes')
   })
 
   it('refuses a curve whose sizes cannot be a quarter of a circle', () => {

@@ -30,6 +30,7 @@ function snapshot(revision: number, wanted: boolean): LayoutStageSnapshot {
     widthText: '',
     depthText: '',
     summaryText: '',
+    summaryWithSizesOnly: false,
     arrangementText: '',
     isEmpty: true,
     labelFor: () => 'Unit',

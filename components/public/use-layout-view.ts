@@ -5,8 +5,22 @@
 // variation each unit is, and what could join at each open end. Pure derivation
 // over the builder's draft and the page's variation payload - no state of its own.
 import { useMemo } from 'react'
-import { candidatesAtEnd, endPlan, type EndCandidate } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import { layoutEntriesExpanded, layoutPieceCount, type ChainEnd, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import {
+  candidatesAtEnd,
+  candidatesInFront,
+  endPlan,
+  frontSpaceKey,
+  type EndCandidate,
+  type SpaceKey,
+} from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import {
+  footprintsOverlap,
+  layoutEntriesExpanded,
+  layoutPieceCount,
+  type ChainEnd,
+  type FloorRectangle,
+  type PlacedPiece,
+} from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { encodeLayout } from '@/modules/modular-configurator-for-shop/lib/layout-code'
 import {
   describeArrangement,
@@ -26,12 +40,13 @@ import type { LayoutDraft } from '@/modules/modular-configurator-for-shop/compon
 import type { OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
 import type { SvrOptionWithValues, VariantSelectorPayload } from '@/modules/shop-variations/lib/types'
 
-export interface EndView {
-  end: ChainEnd
+/** One space a unit could go in: an open end, or in front of a backed unit. */
+export interface SpaceView {
+  key: SpaceKey
   candidates: EndCandidate[]
   /** The first unit that could go here, drawn as the dashed space; null when nothing fits. */
   ghost: EndCandidate | null
-  /** "after Corner Unit" / "before Left Unit" - which neighbour the space is beside. */
+  /** "after Corner Unit" / "before Left Unit" / "in front of Chair with Back" - where the space is. */
   besideText: string
 }
 
@@ -48,7 +63,12 @@ export interface LayoutView {
   unitCountText: string
   code: string
   childIdByEntry: Map<string, string | null>
-  ends: Record<ChainEnd, EndView>
+  /** The two ends first, then the spaces in front of units in list order. */
+  spaces: SpaceView[]
+}
+
+export function spaceViewFor(view: LayoutView, key: SpaceKey): SpaceView | null {
+  return view.spaces.find((space) => space.key === key) ?? null
 }
 
 export function pieceLookup(pieces: readonly StorefrontPiece[]): Map<string, StorefrontPiece> {
@@ -101,7 +121,7 @@ export function useLayoutView(
     const definitions = storefront.pieces.map((piece) => piece.definition)
 
     const definitionsById = new Map(definitions.map((definition) => [definition.pieceId, definition]))
-    const endView = (end: ChainEnd): EndView => {
+    const endView = (end: ChainEnd): SpaceView => {
       const candidates = candidatesAtEnd(placed, end, definitions, limits)
       const neighbour = end === 'end' ? draft.chain[draft.chain.length - 1] : draft.chain[0]
       // At an arm end the new unit goes just inside the arm unit, so the words
@@ -110,12 +130,29 @@ export function useLayoutView(
       const side = end === 'end' ? (insideArm ? 'before' : 'after') : insideArm ? 'after' : 'before'
       const besideText = neighbour ? `${side} ${labelOf(neighbour.pieceId)}` : ''
       return {
-        end,
+        key: end,
         candidates,
         ghost: candidates.find((candidate) => candidate.refusal === null) ?? null,
         besideText,
       }
     }
+    // A space in front of every backed unit that could take a backless one. Only
+    // a range with both kinds of straight unit has any. Where two units share a
+    // label, the list number says which is meant.
+    const hosts = draft.chain.filter((entry) => !entry.frontSpur)
+    const frontViews = hosts.flatMap((host): SpaceView[] => {
+      const candidates = candidatesInFront(placed, host.entryId, definitions, limits)
+      if (candidates.length === 0) return []
+      const label = labelOf(host.pieceId)
+      const sameLabel = hosts.filter((other) => labelOf(other.pieceId) === label).length > 1
+      const number = expanded.findIndex((entry) => entry.entryId === host.entryId) + 1
+      return [{
+        key: frontSpaceKey(host.entryId),
+        candidates,
+        ghost: candidates.find((candidate) => candidate.refusal === null) ?? null,
+        besideText: sameLabel ? `in front of ${label} (unit ${number})` : `in front of ${label}`,
+      }]
+    })
 
     return {
       price,
@@ -146,20 +183,26 @@ export function useLayoutView(
         },
       ),
       childIdByEntry: new Map(price.units.map((unit) => [unit.entry.entryId, unit.variant?.childProductId ?? null])),
-      ends: { start: endView('start'), end: endView('end') },
+      spaces: [endView('start'), endView('end'), ...frontViews],
     }
   }, [storefront, payload, draft, placed, layoutChoices])
 }
 
 /**
  * The dashed spaces a unit can go in, each labelled for a screen reader. An empty
- * layout offers one, in the middle; otherwise each open end offers its own.
+ * layout offers one, in the middle; otherwise each open end offers its own, and
+ * each backed unit that can take a backless one in front of it offers that. Two
+ * front spaces can cover the same floor (in the crook of an L); only the first is
+ * drawn, and the other comes back if that one is not used.
  */
 export function joinableSpaces(view: LayoutView, isEmpty: boolean): PlanGhost[] {
-  return (['start', 'end'] as const).flatMap((end) => {
-    const endView = view.ends[end]
-    if (!endView.ghost || (end === 'start' && isEmpty)) return []
-    const label = isEmpty ? 'Add your first unit' : `Add a unit ${endView.besideText}`
-    return [{ end, footprint: endView.ghost.footprint, label }]
+  const drawn: FloorRectangle[] = []
+  return view.spaces.flatMap((space) => {
+    if (!space.ghost || (space.key === 'start' && isEmpty)) return []
+    const { footprint } = space.ghost
+    if (space.key !== 'start' && space.key !== 'end' && drawn.some((other) => footprintsOverlap(other, footprint))) return []
+    drawn.push(footprint)
+    const label = isEmpty ? 'Add your first unit' : `Add a unit ${space.besideText}`
+    return [{ key: space.key, footprint, label }]
   })
 }

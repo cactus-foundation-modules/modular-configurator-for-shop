@@ -1,6 +1,6 @@
 {
   "name": "cactus-module-modular-configurator-for-shop",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Let shoppers build a layout from a modular product's units in 3D - sofas, bench seating, anything that joins end to end and turns corners - and buy the whole arrangement in one go",
   "license": "MIT",
   "private": true

@@ -28,6 +28,7 @@ const CONFIG: ConfiguratorConfig = {
     { valueSlug: 'central-unit', shape: { kind: 'straight', closedLeft: false, closedRight: false }, widthMm: 550, depthMm: 710, modelTurnDegrees: 'auto' },
     { valueSlug: 'right-end-unit', shape: { kind: 'straight', closedLeft: false, closedRight: true }, widthMm: 710, depthMm: 710, modelTurnDegrees: 'auto' },
   ],
+  viewSummary: 'always',
 }
 
 describe('pickStartingLayout', () => {

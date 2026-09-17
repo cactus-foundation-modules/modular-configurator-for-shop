@@ -14,8 +14,9 @@
 // taps on it come back here. Only on a page with no gallery to host it does the
 // view appear in this tab instead.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChainEnd } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { spaceOfKey, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { formatMoney } from '@/modules/shop/lib/money'
+import { taxViewAmounts, type ProductTaxView } from '@/modules/shop/lib/tax-view-shared'
 import { useVariationSelection } from '@/modules/shop-variations/lib/use-variation-selection'
 import type { PackedVariationBootstrap } from '@/modules/shop-variations/lib/variation-bootstrap-pack'
 import { placeChain } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
@@ -42,6 +43,16 @@ interface LayoutBuilderProps {
   intro: string
 }
 
+// A preset tile's price on each side of tax, for the shopper's VAT switch.
+function presetPriceSides(total: number, taxView: ProductTaxView, currencySymbol: string): NonNullable<PresetTileView['priceSides']> {
+  const amounts = taxViewAmounts(total, taxView)
+  return {
+    defaultSide: taxView.defaultSide,
+    ex: formatMoney(amounts.ex, currencySymbol),
+    inc: formatMoney(amounts.inc, currencySymbol),
+  }
+}
+
 export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderProps) {
   const selection = useVariationSelection(storefront.slug, bootstrap)
   const payload = selection.payload
@@ -57,9 +68,10 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
   // shapes, unless the shopper had asked for an empty builder.
   const [designingOwn, setDesigningOwn] = useState(false)
   const [statusText, setStatusText] = useState<string | null>(null)
-  // Which open end's "add a unit" list is showing. Held here, not in the
-  // workspace, because a tap on a dashed space in the gallery opens it too.
-  const [pickerEnd, setPickerEnd] = useState<ChainEnd | null>(null)
+  // Which space's "add a unit" list is showing - an open end, or in front of a
+  // unit. Held here, not in the workspace, because a tap on a dashed space in the
+  // gallery opens it too.
+  const [pickerSpace, setPickerSpace] = useState<SpaceKey | null>(null)
   const { activeTab, hosts } = useLayoutStageState(storefront.slug)
 
   const pieceById = useMemo(() => pieceLookup(storefront.pieces), [storefront.pieces])
@@ -112,6 +124,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
     }
   }, [builder.editCount, code])
 
+  const taxView = selection.taxView
   const presets = useMemo<PresetTileView[]>(() => {
     if (!payload) return []
     return storefront.presets.map((preset, index) => {
@@ -123,9 +136,12 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         placed: placeChain(chain, definitions),
         unitCountText: unitCountLabel(chain.length),
         priceText: price.total > 0 ? formatMoney(price.total, selection.currencySymbol) : '',
+        // Both sides of tax where the shopper's VAT switch is on (shop's
+        // lib/tax-view-shared.ts), so a tile follows it like every other price.
+        ...(price.total > 0 && taxView ? { priceSides: presetPriceSides(price.total, taxView, selection.currencySymbol) } : {}),
       }
     })
-  }, [payload, storefront.presets, storefront.pieceOptionId, layoutChoices, definitions, selection.currencySymbol])
+  }, [payload, storefront.presets, storefront.pieceOptionId, layoutChoices, definitions, selection.currencySymbol, taxView])
 
   const pricesInText = useMemo(() => {
     if (!payload) return ''
@@ -158,30 +174,38 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
 
   const selectUnit = useCallback(
     (entryId: string | null) => {
-      setPickerEnd(null)
+      setPickerSpace(null)
       dispatch({ type: 'select', entryId })
     },
     [dispatch],
   )
   const openPicker = useCallback(
-    (end: ChainEnd) => {
+    (key: SpaceKey) => {
       dispatch({ type: 'select', entryId: null })
-      setPickerEnd(end)
+      setPickerSpace(key)
     },
     [dispatch],
   )
   const removeUnit = useCallback(
     (entryId: string) => {
-      setPickerEnd(null)
+      setPickerSpace(null)
       dispatch({ type: 'remove', entryId })
       dispatch({ type: 'select', entryId: null })
     },
     [dispatch],
   )
   const addUnit = useCallback(
-    (end: ChainEnd, pieceId: string) => {
-      dispatch({ type: 'add', end, pieceId })
-      setPickerEnd(end)
+    (key: SpaceKey, pieceId: string) => {
+      const space = spaceOfKey(key)
+      if (space.kind === 'end') {
+        // The end stays open for the next unit: a row is usually laid several at a go.
+        dispatch({ type: 'add', end: space.end, pieceId })
+        setPickerSpace(key)
+        return
+      }
+      // A unit in front fills its space, so there is nothing left to pick for it.
+      dispatch({ type: 'add-front-spur', hostEntryId: space.hostEntryId, pieceId, select: false })
+      setPickerSpace(null)
     },
     [dispatch],
   )
@@ -204,6 +228,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       widthText: view.widthText,
       depthText: view.depthText,
       summaryText: isEmpty ? 'Tap the + to place your first unit' : `${view.shapeLabel} · ${view.unitCountText} · ${view.footprintText}`,
+      summaryWithSizesOnly: !isEmpty && storefront.viewSummary === 'with-sizes',
       arrangementText: view.arrangementText,
       isEmpty,
       labelFor,
@@ -243,7 +268,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         }}
         onDesignOwn={() => {
           setStatusText(null)
-          setPickerEnd(null)
+          setPickerSpace(null)
           setDesigningOwn(true)
         }}
       />
@@ -256,13 +281,14 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       payload={payload}
       currencySymbol={selection.currencySymbol}
       priceSuffix={selection.priceSuffix}
+      taxView={taxView}
       builder={builder}
       view={view}
       snapshot={snapshot}
       viewInGallery={hosts > 0}
-      pickerEnd={pickerEnd}
+      pickerSpace={pickerSpace}
       onOpenPicker={openPicker}
-      onClosePicker={() => setPickerEnd(null)}
+      onClosePicker={() => setPickerSpace(null)}
       onAddUnit={addUnit}
       onSelectUnit={selectUnit}
       layoutChoices={layoutChoices}
@@ -272,13 +298,13 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         selection.setOption(optionId, valueId)
       }}
       onReset={() => {
-        setPickerEnd(null)
+        setPickerSpace(null)
         setStatusText(null)
         setDesigningOwn(false)
         dispatch({ type: 'clear' })
       }}
       onResetLayout={() => {
-        setPickerEnd(null)
+        setPickerSpace(null)
         setStatusText(null)
         // Back to the shapes, the same place "Reset options" goes: a shopper who
         // clears a layout is starting again, and starting again is where the

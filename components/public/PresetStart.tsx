@@ -7,6 +7,8 @@
 // markup the shop page will.
 import type { PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { LayoutPlan } from '@/modules/modular-configurator-for-shop/components/public/LayoutPlan'
+import { TaxViewText } from '@/modules/shop/components/public/TaxViewText'
+import type { TaxViewSide } from '@/modules/shop/lib/tax-view-shared'
 
 export interface PresetTileView {
   key: string
@@ -14,6 +16,10 @@ export interface PresetTileView {
   placed: readonly PlacedPiece[]
   unitCountText: string
   priceText: string
+  // The same price on each side of tax, where the shopper's VAT switch is on
+  // (shop's lib/tax-view-shared.ts). Absent where it is off, and in the page
+  // editor's preview, which print `priceText` alone.
+  priceSides?: { defaultSide: TaxViewSide; ex: string; inc: string }
 }
 
 interface PresetStartProps {
@@ -46,7 +52,10 @@ export function PresetStart({ intro, labelFor, presets, pricesInText, onStartPre
             <span className="mcf-preset-name">{preset.name}</span>
             <span className="mcf-preset-meta">
               {preset.unitCountText}
-              {preset.priceText ? ` · ${preset.priceText}` : ''}
+              {preset.priceText ? ' · ' : ''}
+              {preset.priceText && preset.priceSides
+                ? <TaxViewText defaultSide={preset.priceSides.defaultSide} excluding={preset.priceSides.ex} including={preset.priceSides.inc} />
+                : preset.priceText}
             </span>
           </button>
         ))}

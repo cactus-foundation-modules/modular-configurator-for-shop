@@ -8,6 +8,8 @@
 import { CartLineControlView } from '@/modules/shop/components/public/CartLineControlView'
 import { CART_LINE_CSS } from '@/modules/shop/components/public/cart-line-css'
 import { formatMoney } from '@/modules/shop/lib/money'
+import { TaxViewMoney } from '@/modules/shop/components/public/TaxViewText'
+import type { ProductTaxView } from '@/modules/shop/lib/tax-view-shared'
 import type { LayoutDelivery } from '@/modules/modular-configurator-for-shop/lib/layout-delivery'
 import { itemCountLabel } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
 
@@ -17,11 +19,13 @@ interface LayoutDeliveryPickerProps {
   itemCount: number
   /** How many of the layout, so the total covers them all. */
   layoutQuantity: number
+  /** The shopper's VAT switch, or null where the shop has it off. */
+  taxView: ProductTaxView | null
   currencySymbol: string
   onChange: (value: string) => void
 }
 
-export function LayoutDeliveryPicker({ delivery, itemCount, layoutQuantity, currencySymbol, onChange }: LayoutDeliveryPickerProps) {
+export function LayoutDeliveryPicker({ delivery, itemCount, layoutQuantity, currencySymbol, taxView, onChange }: LayoutDeliveryPickerProps) {
   const total = (delivery.totalByValue.get(delivery.control.value) ?? 0) * layoutQuantity
   return (
     <div className="mcf-delivery">
@@ -31,7 +35,7 @@ export function LayoutDeliveryPicker({ delivery, itemCount, layoutQuantity, curr
       <CartLineControlView control={delivery.control} groupName="mcf-layout-delivery" onChange={onChange} />
       {total > 0 ? (
         <p className="mcf-delivery-total">
-          Delivery for your layout: <strong>{formatMoney(total, currencySymbol)}</strong> ({itemCountLabel(itemCount)})
+          Delivery for your layout: <strong><TaxViewMoney amount={total} view={taxView} format={(n) => formatMoney(n, currencySymbol)} /></strong> ({itemCountLabel(itemCount)})
         </p>
       ) : null}
     </div>

@@ -16,8 +16,10 @@ import {
   isReversible,
   layoutIsClosed,
   layoutPieceCount,
+  mainChainOf,
   piecesOverlap,
   placeChain,
+  placeFrontSpur,
   placeLayout,
   type ChainEnd,
   type ChainEntry,
@@ -62,6 +64,29 @@ export interface EndCandidate {
 
 export interface ChainLimits {
   maxPieces: number
+}
+
+/**
+ * A space a new unit can go in, as one string the view islands can pass around:
+ * an open end of the chain, or the floor in front of a backed unit
+ * (`front:<host entry id>`) where a backless one can stand.
+ */
+export type SpaceKey = ChainEnd | `front:${string}`
+
+export type LayoutSpace = { kind: 'end'; end: ChainEnd } | { kind: 'front'; hostEntryId: string }
+
+const FRONT_SPACE_PREFIX = 'front:'
+
+export function frontSpaceKey(hostEntryId: string): SpaceKey {
+  return `${FRONT_SPACE_PREFIX}${hostEntryId}`
+}
+
+export function isSpaceKey(value: unknown): value is SpaceKey {
+  return value === 'start' || value === 'end' || (typeof value === 'string' && value.startsWith(FRONT_SPACE_PREFIX) && value.length > FRONT_SPACE_PREFIX.length)
+}
+
+export function spaceOfKey(key: SpaceKey): LayoutSpace {
+  return key === 'start' || key === 'end' ? { kind: 'end', end: key } : { kind: 'front', hostEntryId: key.slice(FRONT_SPACE_PREFIX.length) }
 }
 
 export function canJoin(before: PieceDefinition, after: PieceDefinition): boolean {
@@ -177,7 +202,8 @@ export function candidatesAtEnd(
   definitions: readonly PieceDefinition[],
   limits: ChainLimits,
 ): EndCandidate[] {
-  const chain = placed.map((piece) => piece.entry)
+  // Front spurs ride on their hosts; only the main chain has ends to add to.
+  const chain = mainChainOf(placed)
   const byId = new Map([...placed.map((piece) => piece.definition), ...definitions].map((definition) => [definition.pieceId, definition]))
   const plan = endPlan(chain, end, byId)
   const closed = isClosedChain(chain, byId)
@@ -201,6 +227,31 @@ export function candidatesAtEnd(
 }
 
 const ORIGIN_POSE: PiecePose = { centre: { x: 0, z: 0 }, rotationY: 0 }
+
+/**
+ * Every backless type offered in front of one backed straight unit, each drawn
+ * where it would stand and refused where it cannot (the layout is full, or it
+ * would sit on another unit). Empty when the unit cannot take one at all: it has
+ * a unit in front already, is not a backed straight, or the range has no
+ * backless straight to offer.
+ */
+export function candidatesInFront(
+  placed: readonly PlacedPiece[],
+  hostEntryId: string,
+  definitions: readonly PieceDefinition[],
+  limits: ChainLimits,
+): EndCandidate[] {
+  const host = placed.find((piece) => piece.entry.entryId === hostEntryId)
+  if (!host || host.entry.frontSpur || !canHostFrontSpur(host.definition)) return []
+  const chain = mainChainOf(placed)
+  const byId = new Map([...placed.map((piece) => piece.definition), ...definitions].map((definition) => [definition.pieceId, definition]))
+  return definitions.filter(canBeFrontSpur).map((definition) => {
+    const spur = { entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId }
+    const result = addFrontSpur(chain, hostEntryId, spur, byId, limits)
+    const marker = placeFrontSpur(host, spur, definition)
+    return { definition, pose: marker.pose, footprint: marker.footprint, refusal: result.ok ? null : result.refusal }
+  })
+}
 
 function checked(
   chain: ChainEntry[],

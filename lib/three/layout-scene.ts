@@ -28,7 +28,8 @@ import type {
 } from 'three'
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { addLights, disposeRenderer, warmKtx2Support } from '@/modules/product-3d-views-for-shop/lib/three/load-model'
-import type { ChainEnd, FloorRectangle, PiecePose } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import type { FloorRectangle, PiecePose } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { isSpaceKey, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import type { StorefrontViewerLook } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import type { BuiltUnitModel } from '@/modules/modular-configurator-for-shop/lib/three/unit-model'
 
@@ -44,13 +45,13 @@ export interface SceneUnit {
 }
 
 export interface SceneGhost {
-  end: ChainEnd
+  key: SpaceKey
   footprint: FloorRectangle
 }
 
 export interface SceneCallbacks {
   onSelectUnit: (entryId: string | null) => void
-  onPickGhost: (end: ChainEnd) => void
+  onPickGhost: (key: SpaceKey) => void
   onRemoveUnit: (entryId: string) => void
   onLoadingChange: (unitsLoading: number) => void
   onContextLost: () => void
@@ -383,12 +384,12 @@ export class LayoutScene {
   private buildGhost(ghost: SceneGhost): Group {
     const { three } = this
     const group = new three.Group()
-    group.userData.ghostEnd = ghost.end
+    group.userData.ghostKey = ghost.key
     const fill = this.floorFill(ghost.footprint, this.theme.accent, 0.16, 0.004)
-    fill.userData.ghostEnd = ghost.end
+    fill.userData.ghostKey = ghost.key
     group.add(fill, this.floorOutline(ghost.footprint, this.theme.accent, true, 0.006))
     const plus = this.plusSprite()
-    plus.userData.ghostEnd = ghost.end
+    plus.userData.ghostKey = ghost.key
     plus.position.set(
       toMetres((ghost.footprint.minX + ghost.footprint.maxX) / 2),
       0.45,
@@ -776,7 +777,7 @@ export class LayoutScene {
 
   private hitAt(
     event: PointerEvent,
-  ): { entryId: string } | { ghostEnd: ChainEnd } | { removeEntryId: string } | null {
+  ): { entryId: string } | { ghostKey: SpaceKey } | { removeEntryId: string } | null {
     const { three } = this
     const rect = this.canvas.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) return null
@@ -795,13 +796,13 @@ export class LayoutScene {
     // The "+" badge is drawn over everything, the remove badge included, so a tap
     // on it is a tap on it even where a unit or its remove badge sits behind;
     // then the remove badge; otherwise the nearest thing under the pointer wins.
-    const badge = hits.find((hit) => (hit.object as Partial<Sprite>).isSprite && findUserData(hit.object, 'ghostEnd'))
+    const badge = hits.find((hit) => (hit.object as Partial<Sprite>).isSprite && findUserData(hit.object, 'ghostKey'))
     const removeEntryId = badge ? null : hits.map((candidate) => findUserData(candidate.object, 'removeEntryId')).find((id) => typeof id === 'string')
     if (typeof removeEntryId === 'string') return { removeEntryId }
     const hit = badge ?? hits[0]
     if (!hit) return null
-    const ghostEnd = findUserData(hit.object, 'ghostEnd')
-    if (ghostEnd === 'start' || ghostEnd === 'end') return { ghostEnd }
+    const ghostKey = findUserData(hit.object, 'ghostKey')
+    if (isSpaceKey(ghostKey)) return { ghostKey }
     const entryId = findUserData(hit.object, 'entryId')
     return typeof entryId === 'string' ? { entryId } : null
   }
@@ -817,7 +818,7 @@ export class LayoutScene {
       this.setHoveredEntry(null)
       return
     }
-    if ('ghostEnd' in hit) this.callbacks.onPickGhost(hit.ghostEnd)
+    if ('ghostKey' in hit) this.callbacks.onPickGhost(hit.ghostKey)
     else this.callbacks.onSelectUnit(hit.entryId)
   }
 }

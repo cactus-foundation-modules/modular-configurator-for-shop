@@ -13,7 +13,7 @@ export const CONFIGURATOR_CSS = `
 .mcf-tab[aria-selected="true"]{background:var(--color-primary);color:var(--color-on-primary)}
 .mcf-tab:focus-visible{outline:2px solid var(--color-border-focus,var(--color-primary));outline-offset:2px}
 .mcf-tab-panel{min-width:0}
-.mcf-tab-panel[hidden],.mcf-stage-view[hidden],.mcf-sselect-list[hidden]{display:none!important}
+.mcf-tab-panel[hidden],.mcf-stage-view[hidden],.mcf-stage-caption[hidden],.mcf-sselect-list[hidden]{display:none!important}
 .mcf-start{display:grid;gap:.75rem;color:var(--color-text)}
 .mcf-workspace{display:grid;gap:1rem;color:var(--color-text)}
 .mcf-controls{display:grid;gap:1rem;min-width:0}
@@ -40,9 +40,11 @@ export const CONFIGURATOR_CSS = `
 .mcf-plus{display:grid;place-items:center;width:2rem;height:2rem;border-radius:50%;background:var(--color-primary-subtle);color:var(--color-primary);font-size:1.25rem;line-height:1}
 .mcf-summary-lines{display:grid;gap:.2rem;min-width:0}
 .mcf-price-block{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.mcf-price-block>*{white-space:nowrap}
 .mcf-price-now{font-family:var(--display-family,Georgia,serif);font-weight:600;font-size:var(--spd-price-size,34px);color:var(--color-primary)}
 .mcf-price-was{font-size:15px;color:var(--color-text-muted);text-decoration:line-through}
 .mcf-price-rrp,.mcf-price-note{font-size:13px;color:var(--color-text-muted)}
+.mcf-price-note{margin-left:-6px}
 .mcf-reset{margin-left:2.5rem;padding:0;border:0;background:none;color:var(--color-text-muted);font:inherit;font-size:.8125rem;font-weight:400;white-space:nowrap;text-decoration:underline;cursor:pointer}
 .mcf-reset:hover{color:var(--color-text)}
 .mcf-delivery{display:grid;gap:.375rem}

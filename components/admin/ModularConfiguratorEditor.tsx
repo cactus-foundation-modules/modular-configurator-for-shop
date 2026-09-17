@@ -9,8 +9,10 @@ import type { ConfiguratorAdminPayload } from '@/modules/modular-configurator-fo
 import {
   DEFAULT_MAX_PIECES,
   MAX_PIECES_CEILING,
+  VIEW_SUMMARY_CHOICES,
   type ConfiguratorConfig,
   type PieceConfig,
+  type ViewSummaryChoice,
 } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 import { sameOptionName } from '@/modules/modular-configurator-for-shop/lib/piece-catalogue'
 import { CONFIGURATOR_CSS } from '@/modules/modular-configurator-for-shop/components/public/configurator-css'
@@ -28,6 +30,11 @@ import {
 } from '@/modules/modular-configurator-for-shop/components/admin/admin-styles'
 
 const API = '/api/m/modular-configurator-for-shop/admin/products'
+
+const VIEW_SUMMARY_LABELS: Record<ViewSummaryChoice, string> = {
+  always: 'Always',
+  'with-sizes': 'Only while Sizes is on, and never on phones',
+}
 
 type LoadState =
   | { status: 'loading' }
@@ -196,6 +203,24 @@ export function ModularConfiguratorEditor({ productId }: { productId: string }) 
                 changeConfig({ ...config, maxPieces: Number.isFinite(parsed) && parsed >= 1 ? Math.min(parsed, MAX_PIECES_CEILING) : DEFAULT_MAX_PIECES })
               }}
             />
+          </label>
+          <label style={{ display: 'grid', gap: '0.25rem' }}>
+            <span style={labelStyle}>Layout summary over the view</span>
+            <select
+              style={fieldStyle}
+              value={config.viewSummary}
+              onChange={(event) => {
+                const choice = VIEW_SUMMARY_CHOICES.find((candidate) => candidate === event.target.value)
+                if (choice) changeConfig({ ...config, viewSummary: choice })
+              }}
+            >
+              {VIEW_SUMMARY_CHOICES.map((choice) => (
+                <option key={choice} value={choice}>
+                  {VIEW_SUMMARY_LABELS[choice]}
+                </option>
+              ))}
+            </select>
+            <p style={hintStyle}>The line at the foot of the 3D view and plan that names the shape and gives its size.</p>
           </label>
         </div>
       ) : null}

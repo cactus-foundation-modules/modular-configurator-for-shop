@@ -48,7 +48,9 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
      of three, an L, a U, a horseshoe, a booth, a round booth, a round island and a capsule
      island, built from the units ticked, wherever the range can make them. Backless units
      and curves are never suggested, so a range made only of those (stools, say) needs its
-     ready-made layouts written here.
+     ready-made layouts written here;
+   - choose when the layout summary sits over the view: always (the default), or only while
+     Sizes is on and never at the site's phone width.
 
 ## Linking a ready-made set to the builder
 
@@ -117,7 +119,8 @@ the nearest combination it is made in, and its row says what it is in
   On a phone the layout view stays pinned over the product tab row while the builder controls scroll.
   On a page with no gallery, the view is drawn in the tab instead and pins in the same place. The tab holds what can be added where
   and why not, the units in order, a panel for the selected unit (swap it, give it its own
-  fabric, take it out), starting shapes, the layout's own options, undo, then the price
+  fabric, take it out), dashed spaces in front of backed units where a range also has a
+  backless one to stand there, starting shapes, the layout's own options, undo, then the price
   (styled like the individual tab's, with "Reset options" beside it to start again), the
   delivery choice in the basket's own box and chips - services every unit can have, dated
   by the unit arriving last, priced per item with the layout's total - and "Add layout to

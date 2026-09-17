@@ -15,15 +15,15 @@ import {
   halfCurveCentre,
   layoutBounds,
   pointOnPiece,
-  type ChainEnd,
   type FloorRectangle,
   type FloorVector,
   type PlacedPiece,
 } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import type { SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { formatMetres } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
 
 export interface PlanGhost {
-  end: ChainEnd
+  key: SpaceKey
   footprint: FloorRectangle
   /** Read aloud: "Add a unit after Corner Unit". */
   label: string
@@ -44,7 +44,7 @@ interface LayoutPlanProps {
   showDimensions?: boolean
   emptyText?: string
   onSelect?: (entryId: string) => void
-  onAdd?: (end: ChainEnd) => void
+  onAdd?: (key: SpaceKey) => void
 }
 
 /** Thickness of a drawn backrest and arm, as a share of the unit. */
@@ -117,7 +117,7 @@ export function LayoutPlan({
         />
       ))}
       {ghosts.map((ghost) => (
-        <PlanGhostSpace key={ghost.end} ghost={ghost} fontSize={fontSize * 1.6} onAdd={onAdd} />
+        <PlanGhostSpace key={ghost.key} ghost={ghost} fontSize={fontSize * 1.6} onAdd={onAdd} />
       ))}
       {placed.length === 0 && emptyText ? (
         <text className="mcf-plan-empty" x={(drawn.minX + drawn.maxX) / 2} y={(drawn.minZ + drawn.maxZ) / 2} style={{ fontSize }}>
@@ -288,9 +288,9 @@ function PlanUnit({ piece, number, label, fontSize, interactive, selected, onSel
   )
 }
 
-function PlanGhostSpace({ ghost, fontSize, onAdd }: { ghost: PlanGhost; fontSize: number; onAdd?: (end: ChainEnd) => void }) {
+function PlanGhostSpace({ ghost, fontSize, onAdd }: { ghost: PlanGhost; fontSize: number; onAdd?: (key: SpaceKey) => void }) {
   const { footprint } = ghost
-  const add = () => onAdd?.(ghost.end)
+  const add = () => onAdd?.(ghost.key)
   return (
     <g
       className="mcf-plan-hit"

@@ -73,6 +73,7 @@ export async function loadConfiguratorBlockData(slug: string): Promise<Configura
       pieces,
       presets: presetsFor(saved.config, catalogue.valueIdBySlug, pieces),
       maxPieces: saved.config.maxPieces,
+      viewSummary: saved.config.viewSummary,
       viewer,
     },
   }

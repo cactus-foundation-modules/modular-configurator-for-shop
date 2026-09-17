@@ -3,7 +3,7 @@
 // and Puck deep-copies block props on the way in (a Date would arrive as {}).
 import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { P3dFormat } from '@/modules/product-3d-views-for-shop/lib/formats'
-import type { PieceConfig } from '@/modules/modular-configurator-for-shop/lib/config-schema'
+import type { PieceConfig, ViewSummaryChoice } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 
 /** One kind of unit the shopper can place. `pieceId` is the option value id. */
 export interface StorefrontPiece {
@@ -49,5 +49,7 @@ export interface ConfiguratorStorefrontPayload {
   pieces: StorefrontPiece[]
   presets: StorefrontPreset[]
   maxPieces: number
+  /** When the one-line summary sits over the layout view. */
+  viewSummary: ViewSummaryChoice
   viewer: StorefrontViewerLook
 }

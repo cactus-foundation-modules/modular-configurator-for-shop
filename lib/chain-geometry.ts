@@ -470,7 +470,8 @@ function spurEntryIds(chain: readonly ChainEntry[]): Set<string> {
   return new Set(chain.flatMap((entry) => (entry.frontSpur ? [entry.frontSpur.entryId] : [])))
 }
 
-function placeFrontSpur(host: PlacedPiece, spur: FrontSpur, definition: PieceDefinition): PlacedPiece {
+/** Where a backless unit sits in front of its host: level with the host's width, its back on the host's seat front. */
+export function placeFrontSpur(host: PlacedPiece, spur: FrontSpur, definition: PieceDefinition): PlacedPiece {
   const offset = rotateOnFloor(
     { x: 0, z: host.definition.depthMm / 2 + definition.depthMm / 2 },
     host.pose.rotationY,
@@ -490,22 +491,18 @@ function placeFrontSpur(host: PlacedPiece, spur: FrontSpur, definition: PieceDef
   }
 }
 
-/** Main chain plus any front spurs attached to hosts. */
+/** Main chain plus any front spurs, each spur straight after its host (the list's order). */
 export function placeLayout(
   chain: readonly ChainEntry[],
   definitions: ReadonlyMap<string, PieceDefinition>,
 ): PlacedPiece[] {
-  const main = placeChain(chain, definitions)
-  const byHost = new Map(main.map((piece) => [piece.entry.entryId, piece]))
-  const spurs: PlacedPiece[] = []
-  for (const entry of chain) {
-    const spur = entry.frontSpur
-    if (!spur) continue
-    const host = byHost.get(entry.entryId)
-    const definition = definitions.get(spur.pieceId)
-    if (host && definition) spurs.push(placeFrontSpur(host, spur, definition))
-  }
-  return [...main, ...spurs]
+  return placeLayoutFromMain(placeChain(chain, definitions), definitions)
+}
+
+/** The main chain of a placed layout: every piece that is not a front spur on another. */
+export function mainChainOf(placed: readonly PlacedPiece[]): ChainEntry[] {
+  const spurIds = new Set(placed.flatMap((piece) => (piece.entry.frontSpur ? [piece.entry.frontSpur.entryId] : [])))
+  return placed.filter((piece) => !spurIds.has(piece.entry.entryId)).map((piece) => piece.entry)
 }
 
 /** Re-anchors the chain, then re-attaches front spurs to their hosts. */
@@ -520,24 +517,16 @@ export function commitPlacement(
   const anchoredMain = anchorLayout(placeChain(chain, definitions), mainBefore, movedEntryId)
   const mainById = new Map(anchoredMain.map((piece) => [piece.entry.entryId, piece]))
   const mergedMain = placeChain(chain, definitions).map((piece) => mainById.get(piece.entry.entryId) ?? piece)
-  return placeLayoutFromMain(chain, mergedMain, definitions)
+  return placeLayoutFromMain(mergedMain, definitions)
 }
 
-function placeLayoutFromMain(
-  chain: readonly ChainEntry[],
-  main: readonly PlacedPiece[],
-  definitions: ReadonlyMap<string, PieceDefinition>,
-): PlacedPiece[] {
-  const byHost = new Map(main.map((piece) => [piece.entry.entryId, piece]))
-  const spurs: PlacedPiece[] = []
-  for (const entry of chain) {
-    const spur = entry.frontSpur
-    if (!spur) continue
-    const host = byHost.get(entry.entryId)
-    const definition = definitions.get(spur.pieceId)
-    if (host && definition) spurs.push(placeFrontSpur(host, spur, definition))
-  }
-  return [...main, ...spurs]
+/** Each placed main piece followed by the front spur it carries, if any. */
+function placeLayoutFromMain(main: readonly PlacedPiece[], definitions: ReadonlyMap<string, PieceDefinition>): PlacedPiece[] {
+  return main.flatMap((host) => {
+    const spur = host.entry.frontSpur
+    const definition = spur ? definitions.get(spur.pieceId) : undefined
+    return spur && definition ? [host, placeFrontSpur(host, spur, definition)] : [host]
+  })
 }
 
 /** Every unit that prices and ships, in list order (hosts then their spurs). */

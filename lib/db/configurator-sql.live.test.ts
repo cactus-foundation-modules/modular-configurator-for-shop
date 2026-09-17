@@ -214,6 +214,7 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
         { valueSlug: 'corner-unit', shape: { kind: 'corner' as const, backSide: 'left' as const }, widthMm: 760, depthMm: 760, modelTurnDegrees: 90 as const },
       ],
       presets: [{ name: "Chris's corner - it's a 'test'", valueSlugs: ['left-unit', 'corner-unit'] }],
+      viewSummary: 'with-sizes' as const,
     }
     await configs.saveProductConfigurator(PARENT_ID, true, config)
     const saved = await configs.getProductConfigurator(PARENT_ID)
@@ -260,6 +261,7 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
         { valueSlug: 'central-unit', shape: { kind: 'straight', closedLeft: false, closedRight: false }, widthMm: 660, depthMm: 760, modelTurnDegrees: 'auto' },
       ],
       presets: [],
+      viewSummary: 'always',
     })
 
     expect(await layoutLinks.getLayoutLink(SET_ID)).toBeNull()

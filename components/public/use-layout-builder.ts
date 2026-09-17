@@ -62,7 +62,8 @@ export type BuilderAction =
       byShopper: boolean
     }
   | { type: 'add'; end: ChainEnd; pieceId: string }
-  | { type: 'add-front-spur'; hostEntryId: string; pieceId: string }
+  /** `select`: open the new unit's panel - yes from a unit's own panel, no from a dashed space, like an end. */
+  | { type: 'add-front-spur'; hostEntryId: string; pieceId: string; select: boolean }
   | { type: 'remove'; entryId: string }
   | { type: 'swap'; entryId: string; pieceId: string }
   | { type: 'flip'; entryId: string }
@@ -161,7 +162,7 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
         const spurId = entryIdFor(state.nextEntryNumber)
         const spur: FrontSpur = { entryId: spurId, pieceId: action.pieceId }
         const result = addFrontSpur(state.draft.chain, action.hostEntryId, spur, definitions, limits)
-        return applyEdit(state, result, { nextEntryNumber: state.nextEntryNumber + 1, selectedEntryId: spurId })
+        return applyEdit(state, result, { nextEntryNumber: state.nextEntryNumber + 1, ...(action.select ? { selectedEntryId: spurId } : {}) })
       }
       case 'remove':
         return applyEdit(state, removeEntry(state.draft.chain, action.entryId, definitions, limits))
