@@ -318,25 +318,47 @@ function isStraightBackless(definition: PieceDefinition): boolean {
 }
 
 /**
- * Straight runs align seat fronts when a backless module joins another straight
- * piece. Curves and corners still meet at the back edge.
+ * When a backless straight module joins a backed straight or a corner, seat
+ * fronts align. Backless-to-backless stays back-aligned; curves and rounded
+ * ends still meet on the back edge.
  */
-function straightJoinUsesSeatFront(previous: PieceDefinition, next: PieceDefinition): boolean {
-  if (previous.shape.kind !== 'straight' || next.shape.kind !== 'straight') return false
+function joinUsesSeatFront(previous: PieceDefinition, next: PieceDefinition): boolean {
   const prevBackless = isStraightBackless(previous)
   const nextBackless = isStraightBackless(next)
-  // Backless-to-backless keeps back alignment (curved runs of stools, and equal
-  // depth where it makes no difference). Mixed runs align seat fronts.
-  return prevBackless !== nextBackless
+  if (!prevBackless && !nextBackless) return false
+  if (prevBackless && nextBackless) return false
+  const seatFrontJoin =
+    (piece: PieceDefinition) => piece.shape.kind === 'straight' || piece.shape.kind === 'corner'
+  return seatFrontJoin(previous) && seatFrontJoin(next)
 }
 
-/** Corner on a side face to glue: back end by default, seat front for backless straight runs. */
-function joinAnchorOnFace(face: JoinFace, definition: PieceDefinition, seatFront: boolean): FloorVector {
-  if (!seatFront || definition.shape.kind !== 'straight') return face.backCorner
+/** Front corner of a straight side face (left/right). */
+function straightSideFront(face: JoinFace, depthMm: number): FloorVector {
   return {
     x: face.backCorner.x,
-    z: roundMillimetre(face.backCorner.z + face.towardsFront.z * definition.depthMm),
+    z: roundMillimetre(face.backCorner.z + face.towardsFront.z * depthMm),
   }
+}
+
+/**
+ * Where on this face to glue. Backless straights always use their seat front;
+ * backed straights use their front too when paired with a backless neighbour.
+ * A corner's front-face entry meets a backless module at the backless seat depth,
+ * not the corner's own deeper front edge.
+ */
+function joinAnchorOnFace(
+  face: JoinFace,
+  definition: PieceDefinition,
+  seatFront: boolean,
+  mate: PieceDefinition,
+): FloorVector {
+  if (!seatFront) return face.backCorner
+  if (definition.shape.kind === 'straight') return straightSideFront(face, definition.depthMm)
+  if (definition.shape.kind === 'corner' && isStraightBackless(mate) && Math.abs(face.towardsFront.z) < 0.5) {
+    const sign = face.backCorner.z === 0 ? 1 : Math.sign(face.backCorner.z)
+    return { x: face.backCorner.x, z: roundMillimetre((sign * mate.depthMm) / 2) }
+  }
+  return face.backCorner
 }
 
 function transformFace(face: JoinFace, pose: PiecePose): JoinFace {
@@ -361,10 +383,10 @@ function poseJoinedAfter(
   definition: PieceDefinition,
   flipped: boolean | undefined,
 ): PiecePose {
-  const seatFront = straightJoinUsesSeatFront(previousDefinition, definition)
-  const previousAnchor = joinAnchorOnFace(previousExit, previousDefinition, seatFront)
+  const seatFront = joinUsesSeatFront(previousDefinition, definition)
   const entry = entryFaceOf(definition, flipped)
-  const entryAnchor = joinAnchorOnFace(entry, definition, seatFront)
+  const previousAnchor = joinAnchorOnFace(previousExit, previousDefinition, seatFront, definition)
+  const entryAnchor = joinAnchorOnFace(entry, definition, seatFront, previousDefinition)
   const facingBack = { x: -previousExit.outward.x, z: -previousExit.outward.z }
   const rotationY = snapToQuarterTurn(headingOf(facingBack) - headingOf(entry.outward))
   const rotatedAnchor = rotateOnFloor(entryAnchor, rotationY)

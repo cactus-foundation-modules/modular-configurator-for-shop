@@ -147,3 +147,25 @@ describe('a backless straight beside a backed one', () => {
     expect(fronts[0]).toBe(260)
   })
 })
+
+describe('backless modules on a corner preset', () => {
+  const BACKLESS: PieceDefinition = {
+    pieceId: 'backless',
+    shape: { kind: 'straight', closedLeft: false, closedRight: false, backless: true },
+    widthMm: 660,
+    depthMm: 520,
+  }
+  const CORNER: PieceDefinition = { pieceId: 'corner', shape: { kind: 'corner', backSide: 'left' }, widthMm: 660, depthMm: 660 }
+  const DEFINITIONS = new Map([BACKLESS, CORNER].map((definition) => [definition.pieceId, definition]))
+
+  it('lines each cube up with the corner seat front, not its back edge', () => {
+    const placed = placeChain(chainOf('backless', 'corner', 'backless'), DEFINITIONS)
+    const first = pieceAt(placed, 0)
+    const corner = pieceAt(placed, 1)
+    const last = pieceAt(placed, 2)
+    expect(first.footprint.maxZ).toBe(260)
+    expect(corner.footprint.minZ).toBe(260)
+    expect(last.footprint.minZ).toBe(260)
+    expect(last.footprint.minX).toBe(corner.footprint.maxX)
+  })
+})
