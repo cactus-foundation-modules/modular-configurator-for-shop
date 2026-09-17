@@ -3,7 +3,11 @@
 // One value of the unit option on the set-up screen: whether it is a unit, how it
 // joins, its footprint, and which way its model needs turning.
 import { useState } from 'react'
-import type { PieceConfig } from '@/modules/modular-configurator-for-shop/lib/config-schema'
+import {
+  MAX_SEGMENT_ANGLE_DEGREES,
+  MIN_SEGMENT_ANGLE_DEGREES,
+  type PieceConfig,
+} from '@/modules/modular-configurator-for-shop/lib/config-schema'
 import { AUTOMATIC_MODEL_TURN } from '@/modules/modular-configurator-for-shop/lib/model-orientation'
 import type { AdminOptionValue } from '@/modules/modular-configurator-for-shop/lib/admin-payload'
 import {
@@ -103,6 +107,47 @@ function curveBack(piece: PieceConfig): 'outside' | 'inside' | 'none' {
   return piece.shape.kind === 'curve' || piece.shape.kind === 'half-curve' ? piece.shape.back : 'outside'
 }
 
+/**
+ * A wedge's angle, in degrees, held as typed like the millimetre fields. Only an
+ * angle the set-up can take - in range, to the hundredth - reaches it.
+ */
+function AngleInput({ value, onCommit }: { value: number; onCommit: (degrees: number) => void }) {
+  const [text, setText] = useState(String(value))
+  const [shown, setShown] = useState(value)
+  if (shown !== value) {
+    setShown(value)
+    setText(String(value))
+  }
+  return (
+    <label style={{ display: 'grid', gap: '0.25rem' }}>
+      <span style={labelStyle}>Angle (degrees)</span>
+      <input
+        style={numberFieldStyle}
+        type="number"
+        inputMode="decimal"
+        min={MIN_SEGMENT_ANGLE_DEGREES}
+        max={MAX_SEGMENT_ANGLE_DEGREES}
+        step="any"
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value)
+          const parsed = Math.round(Number(event.target.value) * 100) / 100
+          if (event.target.value !== '' && Number.isFinite(parsed) && parsed >= MIN_SEGMENT_ANGLE_DEGREES && parsed <= MAX_SEGMENT_ANGLE_DEGREES) {
+            setShown(parsed)
+            onCommit(parsed)
+          }
+        }}
+      />
+    </label>
+  )
+}
+
+/** "12 make a full circle" for an angle that divides one exactly; nothing otherwise. */
+function circleCount(angleDegrees: number): string {
+  const count = 360 / angleDegrees
+  return Math.abs(count - Math.round(count)) < 1e-6 ? ` At ${angleDegrees}°, ${Math.round(count)} make a full circle.` : ''
+}
+
 /** What the sizes mean for this kind of unit, in the owner's words. */
 function shapeHint(piece: PieceConfig): string {
   switch (piece.shape.kind) {
@@ -112,6 +157,8 @@ function shapeHint(piece: PieceConfig): string {
       return 'Half of a circle. Its width is the whole curve from one outside end to the other; its seat depth is how deep each cut end is, which should match the units it joins. Its depth follows, at half the width.'
     case 'round-end':
       return 'Width is the flat side, which joins two rows sat back to back. Depth is how far the rounded part sticks out.'
+    case 'segment':
+      return `A straight-sided, wedge-shaped unit whose sides splay apart, so each one bends the row. Width is its wide side (arm included, where it has one); depth is from its back to its front; the angle is how far apart its two sides splay, which is how far it bends the row.${circleCount(piece.shape.angleDegrees)}`
     default:
       return 'Width is across the front of the unit; depth is from the back to the front of the seat.'
   }
@@ -178,8 +225,20 @@ export function PieceSetupRow({ value, piece, onChange }: PieceSetupRowProps) {
             </>
           ) : (
             <>
-              <MillimetreInput label="Width (mm)" value={piece.widthMm} onCommit={(widthMm) => onChange({ ...piece, widthMm })} />
+              <MillimetreInput
+                label={piece.shape.kind === 'segment' ? 'Width of the wide side (mm)' : 'Width (mm)'}
+                value={piece.widthMm}
+                onCommit={(widthMm) => onChange({ ...piece, widthMm })}
+              />
               <MillimetreInput label="Depth (mm)" value={piece.depthMm} onCommit={(depthMm) => onChange({ ...piece, depthMm })} />
+              {piece.shape.kind === 'segment' ? (
+                <AngleInput
+                  value={piece.shape.angleDegrees}
+                  onCommit={(angleDegrees) => {
+                    if (piece.shape.kind === 'segment') onChange({ ...piece, shape: { ...piece.shape, angleDegrees } })
+                  }}
+                />
+              ) : null}
             </>
           )}
           <label style={{ display: 'grid', gap: '0.25rem' }}>

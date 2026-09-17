@@ -54,6 +54,21 @@
  * its back and out through its front instead of its sides, and a join either
  * side of it lines up the middles of the two faces. Out of a corner, that stands
  * the unit square to the row before the corner rather than along the row after it.
+ *
+ * A wedge is a straight-sided slice of a ring: flat back, flat front, and two
+ * cut sides that splay apart by `angleDegrees`, so every wedge turns the row by
+ * its angle (twelve 30 degree wedges make a full circle). `widthMm` is its wide
+ * side, `depthMm` back to front, and the cut sides are its faces. With its back
+ * OUTSIDE the wide side is its back and the seats face in, turning the chain
+ * towards their front like a corner; with its back INSIDE the narrow side is its
+ * back, the seats face out and the chain turns away. One with no back is laid
+ * the inside way when flipped. Unlike a curve it can carry an arm on either cut
+ * side, which closes that side the way a straight unit's arm does.
+ *   back outside -> back corners at (-w/2, -d/2) and (w/2, -d/2)
+ *   back inside  -> back corners at (-w/2 + t, -d/2) and (w/2 - t, -d/2), t = d tan(angle / 2)
+ *
+ * Every turn is exact to a millionth of a degree rather than snapped to a
+ * quarter, so a ring of wedges closes on itself however many it takes.
  */
 
 /** A 2D point or direction on the floor plane, in millimetres. */
@@ -99,6 +114,16 @@ export type PieceShape =
   | {
       kind: 'round-end'
     }
+  | {
+      kind: 'segment'
+      back: CurveBack
+      /** How far apart its cut sides splay, which is how far it turns the row. */
+      angleDegrees: number
+      /** An arm on the left cut side: nothing can join before this piece. */
+      closedLeft: boolean
+      /** An arm on the right cut side: nothing can join after this piece. */
+      closedRight: boolean
+    }
 
 /** Everything the walk needs to know about one kind of piece. */
 export interface PieceDefinition {
@@ -122,7 +147,7 @@ export interface ChainEntry {
   /** Unique within the layout; survives reordering so animations can track it. */
   entryId: string
   pieceId: string
-  /** A reversible piece (a curve or half curve with no back) laid the other way round. */
+  /** A reversible piece (a curve, half curve or wedge with no back) laid the other way round. */
   flipped?: boolean
   /** Backless unit in front of this one's seat (backed straights only). */
   frontSpur?: FrontSpur
@@ -174,15 +199,24 @@ export class UnknownPieceError extends Error {
 const RIGHT_ANGLE = Math.PI / 2
 /** Footprints touching along an edge share it; only real overlap counts. */
 const OVERLAP_TOLERANCE_MM = 1
+/** Turns are kept to this many steps per degree: fine enough for any wedge, coarse enough to kill floating-point dust. */
+const TURN_STEPS_PER_DEGREE = 1_000_000
 
-/** Rotates a floor vector the way three.js `rotation.y` does. */
+/** Rotates a floor point the way three.js `rotation.y` does, to the thousandth of a millimetre. */
 function rotateOnFloor(vector: FloorVector, angle: number): FloorVector {
+  const turned = turnDirection(vector, angle)
+  return { x: roundMillimetre(turned.x), z: roundMillimetre(turned.z) }
+}
+
+/**
+ * Rotates a direction the way three.js `rotation.y` does, unrounded: a wedge's
+ * sides lean at angles a thousandth-rounded unit vector would bend by a
+ * twentieth of a degree, and twelve of those would not close a circle.
+ */
+function turnDirection(vector: FloorVector, angle: number): FloorVector {
   const cosine = Math.cos(angle)
   const sine = Math.sin(angle)
-  return {
-    x: roundMillimetre(vector.x * cosine + vector.z * sine),
-    z: roundMillimetre(-vector.x * sine + vector.z * cosine),
-  }
+  return { x: vector.x * cosine + vector.z * sine, z: -vector.x * sine + vector.z * cosine }
 }
 
 /** Kills floating-point dust so 90 degree turns land on whole numbers. */
@@ -196,13 +230,23 @@ function headingOf(direction: FloorVector): number {
   return Math.atan2(-direction.z, direction.x)
 }
 
-/** Snaps an angle to the nearest quarter turn, in (-PI, PI]. */
-function snapToQuarterTurn(angle: number): number {
-  const quarterTurns = Math.round(angle / RIGHT_ANGLE)
-  let snapped = quarterTurns * RIGHT_ANGLE
-  while (snapped <= -Math.PI) snapped += 2 * Math.PI
-  while (snapped > Math.PI) snapped -= 2 * Math.PI
-  return snapped
+/**
+ * Snaps an angle to the nearest millionth of a degree, in (-PI, PI]. Quarter
+ * turns land exactly on multiples of PI / 2, as they always have, and a wedge's
+ * turn lands exactly on its angle.
+ */
+function snapTurn(angle: number): number {
+  // Wrapped in degrees, before the one conversion: adding 2 PI afterwards would put the dust straight back.
+  let degrees = Math.round((angle * 180 * TURN_STEPS_PER_DEGREE) / Math.PI) / TURN_STEPS_PER_DEGREE
+  degrees %= 360
+  if (degrees <= -180) degrees += 360
+  if (degrees > 180) degrees -= 360
+  return (degrees * Math.PI) / 180
+}
+
+/** True for a rotation that is a whole number of quarter turns. */
+function isQuarterTurn(angle: number): boolean {
+  return Math.abs(angle / RIGHT_ANGLE - Math.round(angle / RIGHT_ANGLE)) < 1e-9
 }
 
 function leftFace(widthMm: number, depthMm: number): JoinFace {
@@ -228,10 +272,10 @@ function cornerFrontFace(widthMm: number, depthMm: number, backSide: CornerBackS
     : { backCorner: { x: widthMm / 2, z: depthMm / 2 }, outward: { x: 0, z: 1 }, towardsFront: { x: -1, z: 0 } }
 }
 
-/** True for a piece that can be laid either way round (a curve or half curve with no back). */
+/** True for a piece that can be laid either way round (a curve, half curve or wedge with no back). */
 export function isReversible(definition: PieceDefinition): boolean {
   const { shape } = definition
-  return (shape.kind === 'curve' || shape.kind === 'half-curve') && shape.back === 'none'
+  return (shape.kind === 'curve' || shape.kind === 'half-curve' || shape.kind === 'segment') && shape.back === 'none'
 }
 
 /** Which way round a curve is laid: a backless one follows its entry's flip. */
@@ -279,6 +323,53 @@ function halfCurveFace(widthMm: number, depthMm: number, seatDepthMm: number, la
   return { backCorner: { x: sign * innerRadius, z: -depthMm / 2 }, outward: { x: 0, z: -1 }, towardsFront: { x: sign, z: 0 } }
 }
 
+/** Half a wedge's angle, in radians: how far each cut side leans in from square. */
+export function segmentHalfAngle(angleDegrees: number): number {
+  return (angleDegrees * Math.PI) / 360
+}
+
+/**
+ * How far each cut side of a wedge comes in across its depth: its wide side less
+ * its narrow side, halved.
+ */
+export function segmentInset(depthMm: number, angleDegrees: number): number {
+  return depthMm * Math.tan(segmentHalfAngle(angleDegrees))
+}
+
+/**
+ * One cut side of a wedge, walked from its back corner to its front. Laid the
+ * outside way the back corners are the wide side's ends; the inside way, the
+ * narrow side's.
+ */
+function segmentFace(widthMm: number, depthMm: number, angleDegrees: number, lay: 'outside' | 'inside', side: 'left' | 'right'): JoinFace {
+  const half = segmentHalfAngle(angleDegrees)
+  const sine = Math.sin(half)
+  const cosine = Math.cos(half)
+  const sign = side === 'left' ? -1 : 1
+  if (lay === 'outside') {
+    return { backCorner: { x: (sign * widthMm) / 2, z: -depthMm / 2 }, outward: { x: sign * cosine, z: sine }, towardsFront: { x: -sign * sine, z: cosine } }
+  }
+  const inset = segmentInset(depthMm, angleDegrees)
+  return {
+    backCorner: { x: sign * (widthMm / 2 - inset), z: -depthMm / 2 },
+    outward: { x: sign * cosine, z: -sine },
+    towardsFront: { x: sign * sine, z: cosine },
+  }
+}
+
+/** A wedge's floor shape, in its own frame: back corners first, left to right, then the front ones right to left. */
+export function segmentCorners(widthMm: number, depthMm: number, angleDegrees: number, lay: 'outside' | 'inside'): FloorVector[] {
+  const inset = segmentInset(depthMm, angleDegrees)
+  const back = lay === 'outside' ? widthMm / 2 : widthMm / 2 - inset
+  const front = lay === 'outside' ? widthMm / 2 - inset : widthMm / 2
+  return [
+    { x: -back, z: -depthMm / 2 },
+    { x: back, z: -depthMm / 2 },
+    { x: front, z: depthMm / 2 },
+    { x: -front, z: depthMm / 2 },
+  ]
+}
+
 /** One half of a rounded end's flat side; both halves meet in its middle. */
 function roundEndFace(depthMm: number, towardsLeft: boolean): JoinFace {
   return { backCorner: { x: 0, z: -depthMm / 2 }, outward: { x: 0, z: -1 }, towardsFront: { x: towardsLeft ? -1 : 1, z: 0 } }
@@ -322,6 +413,8 @@ function entryFaceOf(definition: PieceDefinition, lay: EntryLay): JoinFace {
       return halfCurveFace(widthMm, depthMm, shape.seatDepthMm, curveLayOf(shape.back, flipped), 'left')
     case 'round-end':
       return roundEndFace(depthMm, true)
+    case 'segment':
+      return segmentFace(widthMm, depthMm, shape.angleDegrees, curveLayOf(shape.back, flipped), 'left')
   }
 }
 
@@ -340,17 +433,21 @@ function exitFaceOf(definition: PieceDefinition, lay: EntryLay): JoinFace {
       return halfCurveFace(widthMm, depthMm, shape.seatDepthMm, curveLayOf(shape.back, flipped), 'right')
     case 'round-end':
       return roundEndFace(depthMm, false)
+    case 'segment':
+      return segmentFace(widthMm, depthMm, shape.angleDegrees, curveLayOf(shape.back, flipped), 'right')
   }
 }
 
 /** True when something may join before this piece. */
 export function acceptsJoinBefore(definition: PieceDefinition): boolean {
-  return definition.shape.kind !== 'straight' || !definition.shape.closedLeft
+  const { shape } = definition
+  return (shape.kind !== 'straight' && shape.kind !== 'segment') || !shape.closedLeft
 }
 
 /** True when something may join after this piece. */
 export function acceptsJoinAfter(definition: PieceDefinition): boolean {
-  return definition.shape.kind !== 'straight' || !definition.shape.closedRight
+  const { shape } = definition
+  return (shape.kind !== 'straight' && shape.kind !== 'segment') || !shape.closedRight
 }
 
 function isStraightBackless(definition: PieceDefinition): boolean {
@@ -378,12 +475,14 @@ function joinAnchorFor(previous: PlacedPiece, next: PieceDefinition, nextLay: En
 /**
  * How long a face is. A straight's or corner's side face runs its depth and a
  * face across it (a corner's front, a turned unit's back or front) its width; a
- * curve's cut end is its seat; a rounded end's face is half its flat side.
+ * curve's cut end is its seat; a rounded end's face is half its flat side; a
+ * wedge's cut side leans across its depth.
  */
 function faceLength(face: JoinFace, definition: PieceDefinition): number {
   const { shape } = definition
   if (shape.kind === 'curve' || shape.kind === 'half-curve') return shape.seatDepthMm
   if (shape.kind === 'round-end') return definition.widthMm / 2
+  if (shape.kind === 'segment') return definition.depthMm / Math.cos(segmentHalfAngle(shape.angleDegrees))
   return Math.abs(face.towardsFront.x) > 0.5 ? definition.widthMm : definition.depthMm
 }
 
@@ -430,8 +529,8 @@ function transformFace(face: JoinFace, pose: PiecePose): JoinFace {
       x: roundMillimetre(rotatedCorner.x + pose.centre.x),
       z: roundMillimetre(rotatedCorner.z + pose.centre.z),
     },
-    outward: rotateOnFloor(face.outward, pose.rotationY),
-    towardsFront: rotateOnFloor(face.towardsFront, pose.rotationY),
+    outward: turnDirection(face.outward, pose.rotationY),
+    towardsFront: turnDirection(face.towardsFront, pose.rotationY),
   }
 }
 
@@ -448,7 +547,7 @@ function poseJoinedAfter(previous: PlacedPiece, definition: PieceDefinition, lay
   const previousAnchor = joinAnchorWorld(previousLocalExit, previous.definition, previous.pose, anchor)
   const entryAnchor = joinAnchorLocal(entry, definition, anchor)
   const facingBack = { x: -previousExit.outward.x, z: -previousExit.outward.z }
-  const rotationY = snapToQuarterTurn(headingOf(facingBack) - headingOf(entry.outward))
+  const rotationY = snapTurn(headingOf(facingBack) - headingOf(entry.outward))
   const rotatedAnchor = rotateOnFloor(entryAnchor, rotationY)
   const centre: FloorVector = {
     x: roundMillimetre(previousAnchor.x - rotatedAnchor.x),
@@ -457,15 +556,24 @@ function poseJoinedAfter(previous: PlacedPiece, definition: PieceDefinition, lay
   return { centre, rotationY }
 }
 
-export function footprintAt(definition: PieceDefinition, pose: PiecePose): FloorRectangle {
+/**
+ * The floor rectangle a placed piece covers. Square to the room, that is the
+ * piece's own width and depth, as it always was; turned at any other angle
+ * (beside a wedge), it is taken round the piece's real outline rather than its
+ * turned box, so the layout's overall size is the floor it really takes. A wedge
+ * is always measured round its outline, which depends on which way it is laid.
+ */
+export function footprintAt(definition: PieceDefinition, pose: PiecePose, flipped?: boolean): FloorRectangle {
   const halfWidth = definition.widthMm / 2
   const halfDepth = definition.depthMm / 2
-  const corners = [
+  const box = [
     { x: -halfWidth, z: -halfDepth },
     { x: halfWidth, z: -halfDepth },
     { x: halfWidth, z: halfDepth },
     { x: -halfWidth, z: halfDepth },
-  ].map((corner) => rotateOnFloor(corner, pose.rotationY))
+  ]
+  const local = definition.shape.kind !== 'segment' && isQuarterTurn(pose.rotationY) ? box : outlineOf(definition, flipped).flat()
+  const corners = local.map((corner) => rotateOnFloor(corner, pose.rotationY))
   return {
     minX: roundMillimetre(Math.min(...corners.map((corner) => corner.x)) + pose.centre.x),
     maxX: roundMillimetre(Math.max(...corners.map((corner) => corner.x)) + pose.centre.x),
@@ -490,7 +598,7 @@ export function placeChain(
     const pose: PiecePose = previous
       ? poseJoinedAfter(previous, definition, entry)
       : { centre: { x: 0, z: 0 }, rotationY: 0 }
-    placed.push({ entry, definition, pose, footprint: footprintAt(definition, pose) })
+    placed.push({ entry, definition, pose, footprint: footprintAt(definition, pose, entry.flipped) })
   }
   return placed
 }
@@ -624,7 +732,7 @@ export function anchorLayout(
   const anchorBefore = placedBefore.find((piece) => piece.entry.entryId !== movedEntryId && nowByEntryId.has(piece.entry.entryId))
   const anchorNow = anchorBefore ? nowByEntryId.get(anchorBefore.entry.entryId) : undefined
   if (!anchorBefore || !anchorNow) return [...placedNow]
-  const turn = snapToQuarterTurn(anchorBefore.pose.rotationY - anchorNow.pose.rotationY)
+  const turn = snapTurn(anchorBefore.pose.rotationY - anchorNow.pose.rotationY)
   const turnedAnchorCentre = rotateOnFloor(anchorNow.pose.centre, turn)
   const shift = {
     x: anchorBefore.pose.centre.x - turnedAnchorCentre.x,
@@ -634,9 +742,9 @@ export function anchorLayout(
     const turnedCentre = rotateOnFloor(piece.pose.centre, turn)
     const pose: PiecePose = {
       centre: { x: roundMillimetre(turnedCentre.x + shift.x), z: roundMillimetre(turnedCentre.z + shift.z) },
-      rotationY: snapToQuarterTurn(piece.pose.rotationY + turn),
+      rotationY: snapTurn(piece.pose.rotationY + turn),
     }
-    return { ...piece, pose, footprint: footprintAt(piece.definition, pose) }
+    return { ...piece, pose, footprint: footprintAt(piece.definition, pose, piece.entry.flipped) }
   })
 }
 
@@ -668,9 +776,10 @@ function quarterWay(from: FloorVector, to: FloorVector, share: number): FloorVec
 
 /**
  * A piece's floor shape, in its own frame, as convex polygons that together
- * cover it: one rectangle for a straight or corner unit, thin wedges round a
- * curve or half curve, a fan across a rounded end. Arcs are drawn with short straight sides,
- * which cut inside the true outline by a millimetre or two at most.
+ * cover it: one rectangle for a straight or corner unit, one four-sided shape for
+ * a wedge, thin slices round a curve or half curve, a fan across a rounded end.
+ * Arcs are drawn with short straight sides, which cut inside the true outline by
+ * a millimetre or two at most.
  */
 function outlineOf(definition: PieceDefinition, flipped: boolean | undefined): FloorVector[][] {
   const { shape, widthMm: width, depthMm: depth } = definition
@@ -717,12 +826,29 @@ function outlineOf(definition: PieceDefinition, flipped: boolean | undefined): F
       const rim = (share: number) => ({ x: (width / 2) * Math.cos(share * Math.PI), z: -depth / 2 + depth * Math.sin(share * Math.PI) })
       return steps.slice(1).map((share, index) => [middle, rim(steps[index] ?? 0), rim(share)])
     }
+    case 'segment':
+      return [segmentCorners(width, depth, shape.angleDegrees, curveLayOf(shape.back, flipped))]
   }
 }
 
 /** Each convex polygon's corners, on the floor where the piece is placed. */
 export function floorOutline(piece: PlacedPiece): FloorVector[][] {
   return outlineOf(piece.definition, piece.entry.flipped).map((polygon) => polygon.map((corner) => pointOnPiece(piece.pose, corner)))
+}
+
+/**
+ * The one outline a piece's space is drawn with on the floor - the dashed "+"
+ * space, the highlight under a chosen unit: a wedge's own four sides, and for
+ * every other piece its box, turned as the piece is. Square to the room that box
+ * is exactly the rectangle these were always drawn as.
+ */
+export function floorBoundary(definition: PieceDefinition, pose: PiecePose, flipped?: boolean): FloorVector[] {
+  const { shape, widthMm: width, depthMm: depth } = definition
+  const local =
+    shape.kind === 'segment'
+      ? segmentCorners(width, depth, shape.angleDegrees, curveLayOf(shape.back, flipped))
+      : [{ x: -width / 2, z: -depth / 2 }, { x: width / 2, z: -depth / 2 }, { x: width / 2, z: depth / 2 }, { x: -width / 2, z: depth / 2 }]
+  return local.map((corner) => pointOnPiece(pose, corner))
 }
 
 function projectedSpan(polygon: readonly FloorVector[], axis: FloorVector): [number, number] {

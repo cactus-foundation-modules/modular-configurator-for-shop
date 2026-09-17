@@ -38,19 +38,23 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
    - tick each unit and say how it joins - no arms (with or without a back), arm on the
      left, arm on the right, arms both sides, a corner with its second back on the left or
      right, a quarter-circle or half-circle curve with its back outside, inside or no back at
-     all, or a rounded end that wraps one row round to the row behind it - always as seen from
-     the front; its footprint in millimetres (a curve's size and seat depth; a half curve's
-     width across the whole ring, its depth following at half that); and how its 3D
+     all, a rounded end that wraps one row round to the row behind it, or a wedge (a
+     straight-sided, tapered segment) with its back on the wide side, the narrow side or no
+     back, with or without an arm on either side - always as seen from the front; its footprint
+     in millimetres (a curve's size and seat depth; a half curve's width across the whole ring,
+     its depth following at half that; a wedge's wide side, depth and angle); and how its 3D
      model is turned. Leave that on **Work it out from each model**: supplier files face
      every which way, often differently from one variation to the next, and the builder
      turns each file to match the shape it was told the unit is (`lib/model-orientation.ts`);
    - optionally write ready-made layouts, with a backless unit stood in front of any straight
      unit with a back, and a backless unit beside a corner turned to line up with the row.
+     A curve or wedge with no back can be laid the other way round in them too.
      With none, shoppers are offered a pair, a row
-     of three, an L, a U, a horseshoe, a booth, a round booth, a round island and a capsule
-     island, built from the units ticked, wherever the range can make them. Backless units
-     and curves are never suggested, so a range made only of those (stools, say) needs its
-     ready-made layouts written here;
+     of three, a curved sofa, an L, a U, a horseshoe, a serpentine, a booth, a round booth, a
+     round island and a capsule island, built from the units ticked, wherever the range can make
+     them - wedge shapes counted out from the wedges' angle. Backless units, and curves and
+     wedges with no back, are never suggested, so a range made only of those (stools, say) needs
+     its ready-made layouts written here;
    - choose when the layout summary sits over the view: always (the default), or only while
      Sizes is on and never at the site's phone width.
 
@@ -94,7 +98,13 @@ product photographs show them). So:
   it goes whichever way fits, like a backless curve;
 - a rounded end joins the end of one row to the end of the row behind it, back to back,
   so two rounded ends and two rows make a capsule island. A layout that joins up all the
-  way round has no ends left to add to.
+  way round has no ends left to add to;
+- a wedge turns the chain by its own angle: towards the seats' front with its back on the
+  wide side, away from it with its back on the narrow side, whichever way fits with no back.
+  Twelve 30 degree wedges make a circle, and wedges mix with straight units, corners and each
+  other, so one run can bend in, straighten and bend out again. Its arm, where it has one,
+  closes that side like a straight unit's. Turns are exact to a millionth of a degree, so a
+  ring of them closes on itself.
 
 `lib/chain-geometry.ts` places every unit from that one rule (a "turtle walk" gluing
 each unit's entry face to the previous unit's exit face) and `lib/chain-editing.ts`

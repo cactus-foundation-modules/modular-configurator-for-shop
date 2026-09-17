@@ -15,6 +15,8 @@ import {
   halfCurveCentre,
   layoutBounds,
   pointOnPiece,
+  segmentCorners,
+  segmentInset,
   type FloorRectangle,
   type FloorVector,
   type PlacedPiece,
@@ -25,6 +27,8 @@ import { formatMetres } from '@/modules/modular-configurator-for-shop/lib/layout
 export interface PlanGhost {
   key: SpaceKey
   footprint: FloorRectangle
+  /** The space's own outline on the floor: the unit that would go there, turned as it would sit. */
+  outline: readonly FloorVector[]
   /** Read aloud: "Add a unit after Corner Unit". */
   label: string
 }
@@ -162,6 +166,11 @@ function ringPath(centre: FloorVector, innerRadius: number, outerRadius: number,
   ].join(' ')
 }
 
+/** A closed SVG path through floor points. */
+function polygonPath(corners: readonly FloorVector[]): string {
+  return `${corners.map((corner, index) => `${index === 0 ? 'M' : 'L'} ${corner.x} ${corner.z}`).join(' ')} Z`
+}
+
 /** The piece's outline, backrest and arms, in its own frame, and where its number goes. */
 function planShapeOf(piece: PlacedPiece): { body: ReactElement; numberAt: FloorVector } {
   const { widthMm: width, depthMm: depth, shape } = piece.definition
@@ -208,6 +217,36 @@ function planShapeOf(piece: PlacedPiece): { body: ReactElement; numberAt: FloorV
           </>
         ),
         numberAt: { x: centre.x + seatRadius * far.x, z: centre.z + seatRadius * far.z },
+      }
+    }
+    case 'segment': {
+      const lay = curveLayOf(shape.back, piece.entry.flipped)
+      const inset = segmentInset(depth, shape.angleDegrees)
+      // Half the wedge's width `fromBack` millimetres forward of its back.
+      const halfAcross = (fromBack: number) => width / 2 - inset * (lay === 'outside' ? fromBack / depth : 1 - fromBack / depth)
+      const band = (fromBack: number, toBack: number, side: -1 | 1, thickness: number) => [
+        { x: side * halfAcross(fromBack), z: -depth / 2 + fromBack },
+        { x: side * (halfAcross(fromBack) - thickness), z: -depth / 2 + fromBack },
+        { x: side * (halfAcross(toBack) - thickness), z: -depth / 2 + toBack },
+        { x: side * halfAcross(toBack), z: -depth / 2 + toBack },
+      ]
+      const backs = [
+        { x: -halfAcross(0), z: -depth / 2 },
+        { x: halfAcross(0), z: -depth / 2 },
+        { x: halfAcross(back), z: -depth / 2 + back },
+        { x: -halfAcross(back), z: -depth / 2 + back },
+      ]
+      const armFrom = shape.back === 'none' ? 0 : back
+      return {
+        body: (
+          <>
+            <path className="mcf-plan-unit" d={polygonPath(segmentCorners(width, depth, shape.angleDegrees, lay))} />
+            {shape.back === 'none' ? null : <path className="mcf-plan-back" d={polygonPath(backs)} />}
+            {shape.closedLeft ? <path className="mcf-plan-arm" d={polygonPath(band(armFrom, depth, -1, arm))} /> : null}
+            {shape.closedRight ? <path className="mcf-plan-arm" d={polygonPath(band(armFrom, depth, 1, arm))} /> : null}
+          </>
+        ),
+        numberAt: { x: 0, z: shape.back === 'none' ? 0 : back / 2 },
       }
     }
     case 'round-end':
@@ -288,9 +327,21 @@ function PlanUnit({ piece, number, label, fontSize, interactive, selected, onSel
   )
 }
 
+/** True when an outline is just its footprint rectangle, square to the room. */
+function isFootprintRectangle(outline: readonly FloorVector[], footprint: FloorRectangle): boolean {
+  const near = (first: number, second: number) => Math.abs(first - second) < 0.01
+  return (
+    outline.length === 4 &&
+    outline.every((corner) => (near(corner.x, footprint.minX) || near(corner.x, footprint.maxX)) && (near(corner.z, footprint.minZ) || near(corner.z, footprint.maxZ)))
+  )
+}
+
 function PlanGhostSpace({ ghost, fontSize, onAdd }: { ghost: PlanGhost; fontSize: number; onAdd?: (key: SpaceKey) => void }) {
-  const { footprint } = ghost
+  const { footprint, outline } = ghost
   const add = () => onAdd?.(ghost.key)
+  // Square to the room it is the rounded rectangle it always was; turned by a
+  // wedge, or wedge-shaped itself, it is drawn as the unit would really sit.
+  const square = isFootprintRectangle(outline, footprint)
   return (
     <g
       className="mcf-plan-hit"
@@ -300,14 +351,18 @@ function PlanGhostSpace({ ghost, fontSize, onAdd }: { ghost: PlanGhost; fontSize
       onClick={add}
       onKeyDown={(event) => activateOnKey(event, add)}
     >
-      <rect
-        className="mcf-plan-ghost"
-        x={footprint.minX}
-        y={footprint.minZ}
-        width={footprint.maxX - footprint.minX}
-        height={footprint.maxZ - footprint.minZ}
-        rx={Math.min(footprint.maxX - footprint.minX, footprint.maxZ - footprint.minZ) * 0.05}
-      />
+      {square ? (
+        <rect
+          className="mcf-plan-ghost"
+          x={footprint.minX}
+          y={footprint.minZ}
+          width={footprint.maxX - footprint.minX}
+          height={footprint.maxZ - footprint.minZ}
+          rx={Math.min(footprint.maxX - footprint.minX, footprint.maxZ - footprint.minZ) * 0.05}
+        />
+      ) : (
+        <path className="mcf-plan-ghost" d={polygonPath(outline)} />
+      )}
       <text
         className="mcf-plan-ghost-plus"
         x={(footprint.minX + footprint.maxX) / 2}

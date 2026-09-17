@@ -17,7 +17,7 @@ import { fetchBundle } from '@/modules/product-3d-views-for-shop/lib/fabric-fetc
 import { applyFabricPaint, disposeModel, loadModel } from '@/modules/product-3d-views-for-shop/lib/three/load-model'
 import type { FabricBundle } from '@/modules/product-3d-views-for-shop/lib/types'
 import type { StorefrontPiece } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
-import { curveCentre, curveLayOf, halfCurveCentre, isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { curveCentre, curveLayOf, halfCurveCentre, isReversible, segmentCorners, segmentInset } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { AUTOMATIC_MODEL_TURN, orientModel, rasteriseTops } from '@/modules/modular-configurator-for-shop/lib/model-orientation'
 
 export interface UnitModelRequest {
@@ -145,9 +145,9 @@ async function modelTurnFor(model: Object3D, piece: StorefrontPiece, flipped: bo
   const setting = piece.modelTurnDegrees
   if (setting !== AUTOMATIC_MODEL_TURN) {
     // The owner's turn is for the unit laid its usual way; laid the other way a
-    // curve's frame is a quarter turn round, a half curve's a half turn (see
-    // chain-geometry's curve faces).
-    const halfTurn = piece.definition.shape.kind === 'half-curve'
+    // curve's frame is a quarter turn round, a half curve's or a wedge's a half
+    // turn (see chain-geometry's curve and wedge faces).
+    const halfTurn = piece.definition.shape.kind === 'half-curve' || piece.definition.shape.kind === 'segment'
     const layTurn = isReversible(piece.definition) && flipped ? (halfTurn ? Math.PI : -Math.PI / 2) : 0
     // Clockwise seen from above, which is a negative turn about three's y axis.
     return (-setting * Math.PI) / 180 + layTurn
@@ -302,6 +302,52 @@ async function buildPlaceholder(piece: StorefrontPiece, flipped: boolean, colour
       outline.absellipse(0, depth / 2, width / 2, depth, 0, -Math.PI, true)
       outline.closePath()
       extruded(outline, 0, BLOCK_SEAT_HEIGHT)
+      break
+    }
+    case 'segment': {
+      const lay = curveLayOf(shape.back, flipped)
+      const inset = segmentInset(piece.definition.depthMm, shape.angleDegrees) / MILLIMETRES_PER_METRE
+      /** A floor polygon (unit frame, metres) as an outline in x and -z. */
+      const polygon = (corners: ReadonlyArray<{ x: number; z: number }>) => {
+        const outline = new three.Shape()
+        corners.forEach((corner, index) => (index === 0 ? outline.moveTo(corner.x, -corner.z) : outline.lineTo(corner.x, -corner.z)))
+        outline.closePath()
+        return outline
+      }
+      /** Half the wedge's width `fromBack` metres forward of its back. */
+      const halfAcross = (fromBack: number) => width / 2 - inset * (lay === 'outside' ? fromBack / depth : 1 - fromBack / depth)
+      const corners = segmentCorners(piece.definition.widthMm, piece.definition.depthMm, shape.angleDegrees, lay).map((corner) => ({
+        x: corner.x / MILLIMETRES_PER_METRE,
+        z: corner.z / MILLIMETRES_PER_METRE,
+      }))
+      extruded(polygon(corners), 0, BLOCK_SEAT_HEIGHT)
+      const backZ = -depth / 2
+      if (shape.back !== 'none') {
+        extruded(
+          polygon([
+            { x: -halfAcross(0), z: backZ },
+            { x: halfAcross(0), z: backZ },
+            { x: halfAcross(BLOCK_PANEL), z: backZ + BLOCK_PANEL },
+            { x: -halfAcross(BLOCK_PANEL), z: backZ + BLOCK_PANEL },
+          ]),
+          BLOCK_SEAT_HEIGHT,
+          BLOCK_BACK_HEIGHT,
+        )
+      }
+      const armHeight = BLOCK_BACK_HEIGHT * 0.45
+      const arm = (sign: -1 | 1) =>
+        extruded(
+          polygon([
+            { x: sign * halfAcross(0), z: backZ },
+            { x: sign * (halfAcross(0) - BLOCK_PANEL * 0.8), z: backZ },
+            { x: sign * (halfAcross(depth) - BLOCK_PANEL * 0.8), z: depth / 2 },
+            { x: sign * halfAcross(depth), z: depth / 2 },
+          ]),
+          BLOCK_SEAT_HEIGHT,
+          armHeight,
+        )
+      if (shape.closedLeft) arm(-1)
+      if (shape.closedRight) arm(1)
       break
     }
   }

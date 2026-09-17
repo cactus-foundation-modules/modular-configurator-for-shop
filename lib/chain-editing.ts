@@ -37,7 +37,7 @@ export type EditRefusal =
   | 'end-is-closed'
   /** The layout joins up all the way round, so it has no end to add to. */
   | 'layout-is-closed'
-  /** Only a curve with no back can be turned the other way round. */
+  /** Only a curve or wedge with no back can be turned the other way round. */
   | 'cannot-flip'
   /** Only a straight unit with no back can be turned a quarter. */
   | 'cannot-turn'
@@ -62,6 +62,8 @@ export interface EndCandidate {
   definition: PieceDefinition
   pose: PiecePose
   footprint: FloorRectangle
+  /** Laid the other way round to fit (a curve or wedge with no back), so its outline is drawn that way. */
+  flipped: boolean
   refusal: EditRefusal | null
 }
 
@@ -99,6 +101,8 @@ export interface LayoutUnitSpec {
   frontPieceId?: string
   /** This backless unit turned a quarter. */
   turned?: boolean
+  /** This unit with no back (a curve or wedge) laid the other way round. */
+  flipped?: boolean
 }
 
 /** The chain a written-down layout describes, with entry ids made from `idPrefix`. */
@@ -106,6 +110,7 @@ export function chainFromUnits(units: readonly LayoutUnitSpec[], idPrefix: strin
   return units.map((unit, index) => ({
     entryId: `${idPrefix}${index}`,
     pieceId: unit.pieceId,
+    ...(unit.flipped ? { flipped: true } : {}),
     ...(unit.turned ? { turned: true } : {}),
     ...(unit.frontPieceId ? { frontSpur: { entryId: `${idPrefix}${index}-front`, pieceId: unit.frontPieceId } } : {}),
   }))
@@ -233,7 +238,7 @@ export function candidatesAtEnd(
   return definitions.map((definition) => {
     if (!plan) {
       const refusal = closed ? 'layout-is-closed' : 'end-is-closed'
-      return { definition, pose: ORIGIN_POSE, footprint: footprintAt(definition, ORIGIN_POSE), refusal }
+      return { definition, pose: ORIGIN_POSE, footprint: footprintAt(definition, ORIGIN_POSE), flipped: false, refusal }
     }
     const trials = waysToLay({ entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId }, byId).map((probe) => {
       const trialChain = insertedAt(chain, plan.insertAt, probe)
@@ -245,7 +250,8 @@ export function candidatesAtEnd(
     const trialPlaced = anchorLayout(placeChain(trial, byId), placed, plan.displacedEntryId)
     const marker = trialPlaced.find((piece) => piece.entry.entryId === PROBE_ENTRY_ID)
     const pose = marker?.pose ?? ORIGIN_POSE
-    return { definition, pose, footprint: marker?.footprint ?? footprintAt(definition, pose), refusal }
+    const flipped = marker?.entry.flipped === true
+    return { definition, pose, footprint: marker?.footprint ?? footprintAt(definition, pose, flipped), flipped, refusal }
   })
 }
 
@@ -272,7 +278,7 @@ export function candidatesInFront(
     const spur = { entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId }
     const result = addFrontSpur(chain, hostEntryId, spur, byId, limits)
     const marker = placeFrontSpur(host, spur, definition)
-    return { definition, pose: marker.pose, footprint: marker.footprint, refusal: result.ok ? null : result.refusal }
+    return { definition, pose: marker.pose, footprint: marker.footprint, flipped: false, refusal: result.ok ? null : result.refusal }
   })
 }
 
@@ -404,7 +410,7 @@ export function replaceEntry(
   return firstRefusal ?? { ok: false, refusal: 'unknown-piece' }
 }
 
-/** Lays a reversible unit (a curve with no back) the other way round. */
+/** Lays a reversible unit (a curve or wedge with no back) the other way round. */
 export function flipEntry(
   chain: readonly ChainEntry[],
   entryId: string,

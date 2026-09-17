@@ -267,6 +267,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
             type: 'start-from',
             units: preset.units.map((unit) => ({
               pieceId: unit.pieceId,
+              ...(unit.flipped ? { flipped: true } : {}),
               ...(unit.turned ? { turned: true } : {}),
               ...(unit.frontPieceId ? { front: { pieceId: unit.frontPieceId } } : {}),
             })),

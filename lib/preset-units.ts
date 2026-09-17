@@ -18,7 +18,12 @@ export function presetLayoutUnits(
     const pieceId = idOf(unit.valueSlug)
     const frontPieceId = unit.frontSlug === undefined ? undefined : idOf(unit.frontSlug)
     if (!pieceId || (unit.frontSlug !== undefined && !frontPieceId)) return null
-    specs.push({ pieceId, ...(frontPieceId ? { frontPieceId } : {}), ...(unit.turned ? { turned: true } : {}) })
+    specs.push({
+      pieceId,
+      ...(frontPieceId ? { frontPieceId } : {}),
+      ...(unit.turned ? { turned: true } : {}),
+      ...(unit.flipped ? { flipped: true } : {}),
+    })
   }
   return specs
 }

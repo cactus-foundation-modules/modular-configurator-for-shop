@@ -52,12 +52,31 @@ const RoundEndShapeSchema = z.object({
   kind: z.literal('round-end'),
 })
 
+/** Narrowest and widest a wedge may splay, in degrees (72 make a circle; 3 do). */
+export const MIN_SEGMENT_ANGLE_DEGREES = 5
+export const MAX_SEGMENT_ANGLE_DEGREES = 120
+
+/** A straight-sided slice of a ring: `widthMm` its wide side, `depthMm` back to front. */
+const SegmentShapeSchema = z.object({
+  kind: z.literal('segment'),
+  back: z.enum(['outside', 'inside', 'none']),
+  /** To the hundredth of a degree: 22.5 and 7.5 are real wedges, 22.4999 is a typing slip. */
+  angleDegrees: z
+    .number()
+    .min(MIN_SEGMENT_ANGLE_DEGREES)
+    .max(MAX_SEGMENT_ANGLE_DEGREES)
+    .refine((degrees) => Math.abs(degrees * 100 - Math.round(degrees * 100)) < 1e-6, 'Give the angle to the hundredth of a degree at most'),
+  closedLeft: z.boolean(),
+  closedRight: z.boolean(),
+})
+
 export const PieceShapeSchema = z.discriminatedUnion('kind', [
   StraightShapeSchema,
   CornerShapeSchema,
   CurveShapeSchema,
   HalfCurveShapeSchema,
   RoundEndShapeSchema,
+  SegmentShapeSchema,
 ])
 
 export const PieceConfigSchema = z.object({
@@ -86,6 +105,8 @@ export const PresetUnitSchema = z.object({
   frontSlug: ValueSlugSchema.optional(),
   /** This backless unit turned a quarter. */
   turned: z.boolean().optional(),
+  /** This unit with no back (a curve or wedge) laid the other way round. */
+  flipped: z.boolean().optional(),
 })
 
 export const PresetConfigSchema = z.object({
@@ -97,8 +118,8 @@ export const PresetConfigSchema = z.object({
   valueSlugs: z.array(ValueSlugSchema).min(1).max(MAX_PIECES_CEILING),
   /**
    * The same units with anything stood in front of them and any that are
-   * turned. Written only when a unit has either; read only while it names the
-   * same units, in the same order, as `valueSlugs`.
+   * turned or laid the other way round. Written only when a unit has one of
+   * those; read only while it names the same units, in the same order, as `valueSlugs`.
    */
   units: z.array(PresetUnitSchema).max(MAX_PIECES_CEILING).optional(),
 })
@@ -132,8 +153,9 @@ export function presetWithUnits(preset: PresetConfig, units: readonly PresetUnit
     valueSlug: unit.valueSlug,
     ...(unit.frontSlug ? { frontSlug: unit.frontSlug } : {}),
     ...(unit.turned ? { turned: true } : {}),
+    ...(unit.flipped ? { flipped: true } : {}),
   }))
-  const saysMore = tidy.some((unit) => unit.frontSlug !== undefined || unit.turned === true)
+  const saysMore = tidy.some((unit) => unit.frontSlug !== undefined || unit.turned === true || unit.flipped === true)
   const written: PresetConfig = { name: preset.name, valueSlugs: tidy.map((unit) => unit.valueSlug) }
   return saysMore ? { ...written, units: tidy } : written
 }
@@ -142,7 +164,7 @@ export function presetWithUnits(preset: PresetConfig, units: readonly PresetUnit
 export function presetWithoutUnit(preset: PresetConfig, valueSlug: string): PresetConfig {
   const units = presetUnitsOf(preset)
     .filter((unit) => unit.valueSlug !== valueSlug)
-    .map((unit) => (unit.frontSlug === valueSlug ? { valueSlug: unit.valueSlug, turned: unit.turned } : unit))
+    .map((unit) => (unit.frontSlug === valueSlug ? { valueSlug: unit.valueSlug, turned: unit.turned, flipped: unit.flipped } : unit))
   return presetWithUnits(preset, units)
 }
 export type ConfiguratorConfig = z.infer<typeof ConfiguratorConfigSchema>

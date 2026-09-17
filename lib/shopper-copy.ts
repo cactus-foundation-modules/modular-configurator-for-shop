@@ -11,7 +11,7 @@ export function refusalSentence(refusal: EditRefusal, maxPieces: number): string
     case 'layout-is-closed':
       return 'Your layout joins up all the way round, so there is no end left to add to.'
     case 'cannot-flip':
-      return 'Only a curved unit with no back can be turned the other way round.'
+      return 'Only a curved or wedge-shaped unit with no back can be turned the other way round.'
     case 'cannot-turn':
       return 'Only a unit with no back can be turned.'
     case 'piece-closed-on-joining-side':
@@ -36,7 +36,7 @@ export function refusalHint(refusal: EditRefusal, maxPieces: number): string {
     case 'layout-is-closed':
       return 'The layout already joins up all the way round'
     case 'cannot-flip':
-      return 'Only a curve with no back turns round'
+      return 'Only a curve or wedge with no back turns round'
     case 'cannot-turn':
       return 'Only a unit with no back turns'
     case 'piece-closed-on-joining-side':

@@ -9,12 +9,12 @@
 // Pattern: template matching over a top-down height map. The model is drawn
 // from above onto a coarse grid (its top surface over each cell). The set-up's
 // shape says what that map should look like in the unit's own frame - where the
-// floor is covered (a rectangle, a quarter ring, a half disc) and where the tall
+// floor is covered (a rectangle, a wedge, a quarter ring, a half disc) and where the tall
 // parts are (backrests, arms). Each of the four quarter turns is scored on how
 // well the turned model matches: footprint proportions, covered area, and tall
 // parts in the right places. Pure - no three.js - so it is tested directly and
 // the browser only has to hand it triangles.
-import { curveCentre, curveLayOf, halfCurveCentre, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { curveCentre, curveLayOf, halfCurveCentre, segmentInset, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 
 /**
  * The stored model turn meaning "work it out from each file". Declared here, not
@@ -162,6 +162,18 @@ function templateAt(definition: PieceDefinition, flipped: boolean, x: number, z:
       const across = x / (width / 2)
       const out = (z + depth / 2) / depth
       return { covered: out >= 0 && across * across + out * out <= 1, tall: false }
+    }
+    case 'segment': {
+      // Each side comes in from the wide end towards the narrow one, evenly across the depth.
+      const lay = curveLayOf(shape.back, flipped)
+      const inset = segmentInset(depth, shape.angleDegrees)
+      const fromBack = (z + depth / 2) / depth
+      const halfAcross = width / 2 - inset * (lay === 'outside' ? fromBack : 1 - fromBack)
+      const covered = Math.abs(x) <= halfAcross
+      const back = shape.back !== 'none' && z < -depth / 2 + depth * BACK_SHARE
+      const leftArm = shape.closedLeft && x < -halfAcross + width * ARM_SHARE
+      const rightArm = shape.closedRight && x > halfAcross - width * ARM_SHARE
+      return { covered, tall: covered && (back || leftArm || rightArm) }
     }
   }
 }

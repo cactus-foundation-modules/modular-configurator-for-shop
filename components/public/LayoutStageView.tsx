@@ -24,7 +24,7 @@ export function LayoutStageView({ snapshot, fill }: LayoutStageViewProps) {
   const [viewChoice, setViewChoice] = useState<ViewChoice>('3d')
   const [showDimensions, setShowDimensions] = useState(true)
   const [unitsLoading, setUnitsLoading] = useState(0)
-  const sceneGhosts = useMemo(() => snapshot.ghosts.map(({ key, footprint }) => ({ key, footprint })), [snapshot.ghosts])
+  const sceneGhosts = useMemo(() => snapshot.ghosts.map(({ key, footprint, outline }) => ({ key, footprint, outline })), [snapshot.ghosts])
   // "Bringing the units in…" always shows while models load. The summary follows
   // the set-up: where it is kept to Sizes, it goes with Sizes and stays off phones
   // (hide-mobile is core's utility, on the site's own phone breakpoint).

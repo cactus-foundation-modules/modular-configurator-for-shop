@@ -7,7 +7,7 @@
 // Loaded only through LayoutStageLazy, so three.js reaches a shopper's browser
 // only once they start building a layout.
 import { useEffect, useRef, useState } from 'react'
-import { layoutBounds, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { floorBoundary, layoutBounds, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { LayoutScene, type SceneGhost } from '@/modules/modular-configurator-for-shop/lib/three/layout-scene'
 import { buildUnitModel } from '@/modules/modular-configurator-for-shop/lib/three/unit-model'
@@ -132,6 +132,7 @@ export function LayoutStage(props: LayoutStageProps) {
           entryId: piece.entry.entryId,
           pose: piece.pose,
           footprint: piece.footprint,
+          outline: floorBoundary(piece.definition, piece.pose, piece.entry.flipped),
           sourceKey: `${piece.entry.pieceId}|${childProductId ?? 'unchosen'}|${piece.entry.flipped ? 'flipped' : 'usual'}`,
           build: () => {
             if (!storefrontPiece) return Promise.reject(new Error(`Unknown unit ${piece.entry.pieceId}`))

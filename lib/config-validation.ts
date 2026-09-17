@@ -3,7 +3,7 @@
 // ready-made layout can actually be built. Returns the first problem as a
 // sentence for the owner, or null. Pure, so the save route and its tests agree.
 import { chainFromUnits, findChainProblem } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import { canBeFrontSpur, canHostFrontSpur, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { canBeFrontSpur, canHostFrontSpur, segmentInset, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { presetUnitsOf, type PieceConfig, type SaveConfiguratorBody } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 import { sameOptionName } from '@/modules/modular-configurator-for-shop/lib/piece-catalogue'
 import { presetLayoutUnits } from '@/modules/modular-configurator-for-shop/lib/preset-units'
@@ -66,7 +66,9 @@ export function validateConfigAgainstOptions(
  * Sizes a shape cannot have. A curve is a quarter ring, so its footprint is a
  * square as big as the ring, and its seat has to fit inside that. A half curve
  * is half a ring, as wide as the ring and half as deep (a millimetre either way,
- * for an odd width), and its seat has to fit inside the radius.
+ * for an odd width), and its seat has to fit inside the radius. A wedge's sides
+ * come in by its angle across its depth, and must not cross before its front
+ * (or back): a wedge that comes to a point is a triangle, which is fine.
  */
 export function pieceSizeProblem(piece: PieceConfig): string | null {
   const { shape } = piece
@@ -78,13 +80,19 @@ export function pieceSizeProblem(piece: PieceConfig): string | null {
     if (Math.abs(piece.depthMm * 2 - piece.widthMm) > 1) return 'is a half curve, so its depth must be half its width'
     if (shape.seatDepthMm * 2 >= piece.widthMm) return 'has a seat deeper than the curve it sits in'
   }
+  if (shape.kind === 'segment') {
+    const narrowSide = piece.widthMm - 2 * segmentInset(piece.depthMm, shape.angleDegrees)
+    if (narrowSide < -1) {
+      return `is too deep for its width at ${shape.angleDegrees}°: its sides would cross before they reach its ${shape.back === 'inside' ? 'back' : 'front'}`
+    }
+  }
   return null
 }
 
 const PRESET_PROBLEM_WORDING: Record<NonNullable<ReturnType<typeof findChainProblem>>, string> = {
   'end-is-closed': 'a unit is joined on to an arm',
   'layout-is-closed': 'it carries on after it has joined up all the way round',
-  'cannot-flip': 'it turns round a unit that only goes one way',
+  'cannot-flip': 'it lays a unit the other way round that only goes one way',
   'cannot-turn': 'it turns a unit that has a back',
   'piece-closed-on-joining-side': 'a unit is joined on to an arm',
   'neighbours-cannot-join': 'two neighbouring units meet arm to seat',

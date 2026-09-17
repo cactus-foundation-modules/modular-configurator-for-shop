@@ -28,7 +28,7 @@ import type {
 } from 'three'
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { addLights, disposeRenderer, warmKtx2Support } from '@/modules/product-3d-views-for-shop/lib/three/load-model'
-import type { FloorRectangle, PiecePose } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import type { FloorRectangle, FloorVector, PiecePose } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { isSpaceKey, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import type { StorefrontViewerLook } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import type { BuiltUnitModel } from '@/modules/modular-configurator-for-shop/lib/three/unit-model'
@@ -39,6 +39,8 @@ export interface SceneUnit {
   entryId: string
   pose: PiecePose
   footprint: FloorRectangle
+  /** The unit's outline on the floor (millimetres), for the highlight under it when chosen. */
+  outline: readonly FloorVector[]
   /** Changes whenever what the unit should look like changes (another variation). */
   sourceKey: string
   build: () => Promise<BuiltUnitModel>
@@ -47,6 +49,8 @@ export interface SceneUnit {
 export interface SceneGhost {
   key: SpaceKey
   footprint: FloorRectangle
+  /** The space's outline on the floor (millimetres): the unit that would go there, turned as it would sit. */
+  outline: readonly FloorVector[]
 }
 
 export interface SceneCallbacks {
@@ -78,6 +82,7 @@ interface UnitSlot {
   buildToken: number
   target: PiecePose
   footprint: FloorRectangle
+  outline: readonly FloorVector[]
   /** 0 while arriving, 1 when settled. */
   arrival: number
 }
@@ -222,6 +227,7 @@ export class LayoutScene {
       const slot = existing ?? this.addUnit(unit)
       slot.target = unit.pose
       slot.footprint = unit.footprint
+      slot.outline = unit.outline
       if (slot.sourceKey !== unit.sourceKey) this.loadUnit(slot, unit)
     }
     const boundsChanged = JSON.stringify(bounds) !== JSON.stringify(this.bounds)
@@ -296,6 +302,7 @@ export class LayoutScene {
       buildToken: 0,
       target: unit.pose,
       footprint: unit.footprint,
+      outline: unit.outline,
       arrival: this.theme.reducedMotion ? 1 : 0,
     }
     this.scene.add(holder)
@@ -348,36 +355,34 @@ export class LayoutScene {
 
   // ---- Floor furniture: ghosts, selection, dimensions ----------------------
 
-  private floorOutline(footprint: FloorRectangle, colour: string, dashed: boolean, height: number): Object3D {
+  /** A line round a floor outline (millimetres), just above the floor. */
+  private floorOutline(outline: readonly FloorVector[], colour: string, dashed: boolean, height: number): Object3D {
     const { three } = this
-    const minX = toMetres(footprint.minX)
-    const maxX = toMetres(footprint.maxX)
-    const minZ = toMetres(footprint.minZ)
-    const maxZ = toMetres(footprint.maxZ)
-    const geometry = new three.BufferGeometry().setFromPoints([
-      new three.Vector3(minX, height, minZ),
-      new three.Vector3(maxX, height, minZ),
-      new three.Vector3(maxX, height, maxZ),
-      new three.Vector3(minX, height, maxZ),
-    ])
+    const geometry = new three.BufferGeometry().setFromPoints(
+      outline.map((corner) => new three.Vector3(toMetres(corner.x), height, toMetres(corner.z))),
+    )
     const material = dashed
       ? new three.LineDashedMaterial({ color: new three.Color(colour), dashSize: 0.06, gapSize: 0.04 })
       : new three.LineBasicMaterial({ color: new three.Color(colour) })
-    const outline = new three.LineLoop(geometry, material)
-    if (dashed) outline.computeLineDistances()
-    return outline
+    const loop = new three.LineLoop(geometry, material)
+    if (dashed) loop.computeLineDistances()
+    return loop
   }
 
-  private floorFill(footprint: FloorRectangle, colour: string, opacity: number, height: number): Mesh {
+  /**
+   * A see-through fill over a floor outline (millimetres), just above the floor.
+   * The outline is drawn in x and -z, so laid flat by the same quarter turn the
+   * ground takes it lands the right way round.
+   */
+  private floorFill(outline: readonly FloorVector[], colour: string, opacity: number, height: number): Mesh {
     const { three } = this
-    const width = toMetres(footprint.maxX - footprint.minX)
-    const depth = toMetres(footprint.maxZ - footprint.minZ)
+    const shape = new three.Shape(outline.map((corner) => new three.Vector2(toMetres(corner.x), -toMetres(corner.z))))
     const mesh = new three.Mesh(
-      new three.PlaneGeometry(width, depth),
-      new three.MeshBasicMaterial({ color: new three.Color(colour), transparent: true, opacity, depthWrite: false }),
+      new three.ShapeGeometry(shape),
+      new three.MeshBasicMaterial({ color: new three.Color(colour), transparent: true, opacity, depthWrite: false, side: three.DoubleSide }),
     )
     mesh.rotation.x = -Math.PI / 2
-    mesh.position.set(toMetres(footprint.minX) + width / 2, height, toMetres(footprint.minZ) + depth / 2)
+    mesh.position.y = height
     return mesh
   }
 
@@ -385,9 +390,9 @@ export class LayoutScene {
     const { three } = this
     const group = new three.Group()
     group.userData.ghostKey = ghost.key
-    const fill = this.floorFill(ghost.footprint, this.theme.accent, 0.16, 0.004)
+    const fill = this.floorFill(ghost.outline, this.theme.accent, 0.16, 0.004)
     fill.userData.ghostKey = ghost.key
-    group.add(fill, this.floorOutline(ghost.footprint, this.theme.accent, true, 0.006))
+    group.add(fill, this.floorOutline(ghost.outline, this.theme.accent, true, 0.006))
     const plus = this.plusSprite()
     plus.userData.ghostKey = ghost.key
     plus.position.set(
@@ -510,8 +515,8 @@ export class LayoutScene {
     // Drawn where the unit is going, not where it is mid-glide: the highlight
     // lands first and the unit settles into it.
     this.selectionGroup.add(
-      this.floorFill(slot.footprint, this.theme.accent, 0.22, 0.003),
-      this.floorOutline(slot.footprint, this.theme.accent, false, 0.005),
+      this.floorFill(slot.outline, this.theme.accent, 0.22, 0.003),
+      this.floorOutline(slot.outline, this.theme.accent, false, 0.005),
     )
   }
 

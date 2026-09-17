@@ -1,13 +1,14 @@
 'use client'
 
 // The owner's ready-made layouts: each a name and the units in the order they
-// join - with a backless unit stood in front of any unit that can have one, and
-// a backless unit beside a corner turned to line up with the row - drawn as a
+// join - with a backless unit stood in front of any unit that can have one, a
+// backless unit beside a corner turned to line up with the row, and a curve or
+// wedge with no back laid the other way round - drawn as a
 // plan beside it so a layout that cannot be built is plain to see before anyone
 // saves it. With none written, the storefront suggests its own and those are
 // drawn here too, so the owner knows what shoppers will be offered.
 import { chainFromUnits, findChainProblem, type LayoutUnitSpec } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import { canBeFrontSpur, canBeTurned, canHostFrontSpur, placeLayout, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { canBeFrontSpur, canBeTurned, canHostFrontSpur, isReversible, placeLayout, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import {
   presetUnitsOf,
   presetWithUnits,
@@ -120,7 +121,8 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, onCh
           const definition = definitions.get(unit.valueSlug)
           const canHaveFront = definition !== undefined && canHostFrontSpur(definition) && frontSlugs.length > 0
           const canTurn = turnOfferedAt(units, position, definitions)
-          return canHaveFront || canTurn ? [{ unit, position, canHaveFront, canTurn }] : []
+          const canFlip = definition !== undefined && isReversible(definition)
+          return canHaveFront || canTurn || canFlip ? [{ unit, position, canHaveFront, canTurn, canFlip }] : []
         })
         return (
         <div
@@ -168,8 +170,8 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, onCh
             </div>
             {extras.length > 0 ? (
               <div style={{ display: 'grid', gap: '0.375rem' }}>
-                <span style={labelStyle}>In front, and turned</span>
-                {extras.map(({ unit, position, canHaveFront, canTurn }) => (
+                <span style={labelStyle}>In front, turned and laid the other way</span>
+                {extras.map(({ unit, position, canHaveFront, canTurn, canFlip }) => (
                   <div key={`${unit.valueSlug}-${position}`} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={hintStyle}>
                       {position + 1}. {labelFor(unit.valueSlug)}
@@ -193,6 +195,12 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, onCh
                       <label style={{ ...hintStyle, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                         <input type="checkbox" checked={unit.turned === true} onChange={(event) => setUnit(position, { ...unit, turned: event.target.checked })} />
                         Turned to line up with the row
+                      </label>
+                    ) : null}
+                    {canFlip ? (
+                      <label style={{ ...hintStyle, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <input type="checkbox" checked={unit.flipped === true} onChange={(event) => setUnit(position, { ...unit, flipped: event.target.checked })} />
+                        Bends the other way
                       </label>
                     ) : null}
                   </div>

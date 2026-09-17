@@ -3,7 +3,7 @@
 // whoever packs the order read the same description.
 import { curveLayOf, layoutBounds, layoutIsClosed, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 
-export type LayoutShape = 'straight' | 'l-shape' | 'u-shape' | 'wraparound' | 'serpentine' | 'back-to-back' | 'island'
+export type LayoutShape = 'straight' | 'l-shape' | 'u-shape' | 'wraparound' | 'serpentine' | 'back-to-back' | 'island' | 'curved'
 
 const SHAPE_LABELS: Record<LayoutShape, string> = {
   straight: 'Straight',
@@ -13,6 +13,7 @@ const SHAPE_LABELS: Record<LayoutShape, string> = {
   serpentine: 'Serpentine',
   'back-to-back': 'Back-to-back',
   island: 'Island',
+  curved: 'Curved',
 }
 
 /**
@@ -34,13 +35,15 @@ export function layoutShapeLabel(shape: LayoutShape): string {
  * How many quarter turns each piece makes, and which way: positive towards the
  * seats' front (a corner, a curve with its back outside), negative away from it
  * (a curve with its back inside), 0 for a piece that carries straight on. A half
- * curve is two quarter turns at once.
+ * curve is two quarter turns at once; a wedge turns by its own angle, so by a
+ * share of a quarter.
  */
 function quarterTurnOf(piece: PlacedPiece): number {
   const { shape } = piece.definition
   if (shape.kind === 'corner') return 1
   if (shape.kind === 'curve') return curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 1 : -1
   if (shape.kind === 'half-curve') return curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 2 : -2
+  if (shape.kind === 'segment') return ((curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 1 : -1) * shape.angleDegrees) / 90
   return 0
 }
 
@@ -54,14 +57,16 @@ function joinsRowsBackToBack(piece: PlacedPiece): boolean {
 /**
  * A layout that joins up all the way round is an island; one with a rounded
  * end (or a half curve laid the inside way) has rows back to back; one bending
- * both ways is a serpentine. Otherwise it is named by how many quarter turns it
- * makes, curves counting as corners and a half curve as two.
+ * both ways is a serpentine; one bending on wedges is curved, however far round
+ * it goes. Otherwise it is named by how many quarter turns it makes, curves
+ * counting as corners and a half curve as two.
  */
 export function shapeOfPlaced(placed: readonly PlacedPiece[]): LayoutShape {
   if (layoutIsClosed(placed)) return 'island'
   if (placed.some(joinsRowsBackToBack)) return 'back-to-back'
   const turns = placed.map(quarterTurnOf).filter((turn) => turn !== 0)
   if (turns.some((turn) => turn > 0) && turns.some((turn) => turn < 0)) return 'serpentine'
+  if (placed.some((piece) => piece.definition.shape.kind === 'segment')) return 'curved'
   return layoutShapeOf(turns.reduce((total, turn) => total + Math.abs(turn), 0))
 }
 
