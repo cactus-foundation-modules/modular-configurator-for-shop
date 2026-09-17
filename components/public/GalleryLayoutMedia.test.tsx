@@ -35,6 +35,7 @@ function snapshot(revision: number, wanted: boolean): LayoutStageSnapshot {
     labelFor: () => 'Unit',
     onSelectUnit: () => {},
     onPickGhost: () => {},
+    onRemoveUnit: () => {},
   }
 }
 

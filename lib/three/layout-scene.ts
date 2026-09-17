@@ -51,6 +51,7 @@ export interface SceneGhost {
 export interface SceneCallbacks {
   onSelectUnit: (entryId: string | null) => void
   onPickGhost: (end: ChainEnd) => void
+  onRemoveUnit: (entryId: string) => void
   onLoadingChange: (unitsLoading: number) => void
   onContextLost: () => void
 }
@@ -58,6 +59,9 @@ export interface SceneCallbacks {
 export interface SceneTheme {
   /** CSS colours read from the page's theme tokens. */
   accent: string
+  danger: string
+  /** Contrasting mark on the danger badge (from `--color-text-inverse`). */
+  dangerMark: string
   reducedMotion: boolean
 }
 
@@ -122,6 +126,8 @@ export class LayoutScene {
   private needsRender = true
   private disposed = false
   private pointerDown: { x: number; y: number } | null = null
+  private hoverRemoveBadge: Sprite | null = null
+  private hoveredEntryId: string | null = null
   private readonly removeListeners: Array<() => void> = []
 
   private constructor(
@@ -288,6 +294,7 @@ export class LayoutScene {
   }
 
   private removeUnit(entryId: string, slot: UnitSlot): void {
+    if (this.hoveredEntryId === entryId) this.setHoveredEntry(null)
     this.scene.remove(slot.holder)
     slot.built?.dispose()
     slot.built = null
@@ -403,6 +410,59 @@ export class LayoutScene {
     sprite.scale.set(0.22, 0.22, 0.22)
     sprite.renderOrder = 10
     return sprite
+  }
+
+  private removeSprite(): Sprite {
+    const { three } = this
+    const size = 128
+    const drawing = document.createElement('canvas')
+    drawing.width = size
+    drawing.height = size
+    const context = drawing.getContext('2d')
+    if (context) {
+      context.fillStyle = this.theme.danger
+      context.beginPath()
+      context.arc(size / 2, size / 2, size * 0.46, 0, Math.PI * 2)
+      context.fill()
+      context.strokeStyle = this.theme.dangerMark
+      context.lineWidth = size * 0.09
+      context.lineCap = 'round'
+      const inset = size * 0.3
+      context.beginPath()
+      context.moveTo(inset, inset)
+      context.lineTo(size - inset, size - inset)
+      context.moveTo(size - inset, inset)
+      context.lineTo(inset, size - inset)
+      context.stroke()
+    }
+    const texture = new three.CanvasTexture(drawing)
+    texture.colorSpace = three.SRGBColorSpace
+    const sprite = new three.Sprite(new three.SpriteMaterial({ map: texture, depthTest: false, transparent: true }))
+    sprite.scale.set(0.2, 0.2, 0.2)
+    sprite.renderOrder = 11
+    return sprite
+  }
+
+  /** A remove badge on the hovered unit, parented to its holder so it glides with it. */
+  private setHoveredEntry(entryId: string | null): void {
+    if (this.hoveredEntryId === entryId) return
+    if (this.hoverRemoveBadge && this.hoveredEntryId) {
+      const previous = this.units.get(this.hoveredEntryId)
+      previous?.holder.remove(this.hoverRemoveBadge)
+    }
+    this.hoveredEntryId = entryId
+    if (!entryId) {
+      this.hoverRemoveBadge = null
+      this.needsRender = true
+      return
+    }
+    const slot = this.units.get(entryId)
+    if (!slot) return
+    if (!this.hoverRemoveBadge) this.hoverRemoveBadge = this.removeSprite()
+    this.hoverRemoveBadge.userData.removeEntryId = entryId
+    this.hoverRemoveBadge.position.set(0, 0.48, 0)
+    slot.holder.add(this.hoverRemoveBadge)
+    this.needsRender = true
   }
 
   private rebuildSelection(): void {
@@ -649,6 +709,16 @@ export class LayoutScene {
     const onPointerMove = (event: PointerEvent) => {
       if (this.pointerDown) return
       const hit = this.hitAt(event)
+      if (hit && 'removeEntryId' in hit) {
+        this.canvas.style.cursor = 'pointer'
+        return
+      }
+      if (hit && 'entryId' in hit) {
+        this.setHoveredEntry(hit.entryId)
+        this.canvas.style.cursor = 'pointer'
+        return
+      }
+      this.setHoveredEntry(null)
       this.canvas.style.cursor = hit ? 'pointer' : 'grab'
     }
     const onContextLost = (event: Event) => {
@@ -667,7 +737,9 @@ export class LayoutScene {
     })
   }
 
-  private hitAt(event: PointerEvent): { entryId: string } | { ghostEnd: ChainEnd } | null {
+  private hitAt(
+    event: PointerEvent,
+  ): { entryId: string } | { ghostEnd: ChainEnd } | { removeEntryId: string } | null {
     const { three } = this
     const rect = this.canvas.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) return null
@@ -683,9 +755,11 @@ export class LayoutScene {
     const hits = raycaster
       .intersectObjects([...this.ghostGroup.children, ...holders], true)
       .filter((hit) => !(hit.object as Partial<Line>).isLine)
+    const removeEntryId = hits.map((candidate) => findUserData(candidate.object, 'removeEntryId')).find((id) => typeof id === 'string')
+    if (typeof removeEntryId === 'string') return { removeEntryId }
     // The "+" badge is drawn over everything, so a tap on it is a tap on it even
     // where a unit sits behind; otherwise the nearest thing under the pointer wins.
-    const badge = hits.find((hit) => (hit.object as Partial<Sprite>).isSprite)
+    const badge = hits.find((hit) => (hit.object as Partial<Sprite>).isSprite && findUserData(hit.object, 'ghostEnd'))
     const hit = badge ?? hits[0]
     if (!hit) return null
     const ghostEnd = findUserData(hit.object, 'ghostEnd')
@@ -696,8 +770,16 @@ export class LayoutScene {
 
   private pick(event: PointerEvent): void {
     const hit = this.hitAt(event)
-    if (!hit) this.callbacks.onSelectUnit(null)
-    else if ('ghostEnd' in hit) this.callbacks.onPickGhost(hit.ghostEnd)
+    if (!hit) {
+      this.callbacks.onSelectUnit(null)
+      return
+    }
+    if ('removeEntryId' in hit) {
+      this.callbacks.onRemoveUnit(hit.removeEntryId)
+      this.setHoveredEntry(null)
+      return
+    }
+    if ('ghostEnd' in hit) this.callbacks.onPickGhost(hit.ghostEnd)
     else this.callbacks.onSelectUnit(hit.entryId)
   }
 }

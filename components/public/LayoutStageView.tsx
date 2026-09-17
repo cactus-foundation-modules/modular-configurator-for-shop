@@ -43,6 +43,7 @@ export function LayoutStageView({ snapshot, fill }: LayoutStageViewProps) {
           depthText={snapshot.depthText}
           onSelectUnit={snapshot.onSelectUnit}
           onPickGhost={snapshot.onPickGhost}
+          onRemoveUnit={snapshot.onRemoveUnit}
           onLoadingChange={setUnitsLoading}
         />
       </div>

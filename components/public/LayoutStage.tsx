@@ -27,6 +27,7 @@ export interface LayoutStageProps {
   depthText: string
   onSelectUnit: (entryId: string | null) => void
   onPickGhost: (end: ChainEnd) => void
+  onRemoveUnit: (entryId: string) => void
   onLoadingChange: (unitsLoading: number) => void
 }
 
@@ -75,10 +76,16 @@ export function LayoutStage(props: LayoutStageProps) {
     LayoutScene.create(
       canvas,
       look,
-      { accent: resolveThemeColour(wrap, '--color-primary'), reducedMotion: prefersReducedMotion() },
+      {
+        accent: resolveThemeColour(wrap, '--color-primary'),
+        danger: resolveThemeColour(wrap, '--color-danger', '--color-primary'),
+        dangerMark: resolveThemeColour(wrap, '--color-text-inverse', '--color-text'),
+        reducedMotion: prefersReducedMotion(),
+      },
       {
         onSelectUnit: (entryId) => callbacksRef.current.onSelectUnit(entryId),
         onPickGhost: (end) => callbacksRef.current.onPickGhost(end),
+        onRemoveUnit: (entryId) => callbacksRef.current.onRemoveUnit(entryId),
         onLoadingChange: (count) => callbacksRef.current.onLoadingChange(count),
         onContextLost: () => setStatus('lost'),
       },

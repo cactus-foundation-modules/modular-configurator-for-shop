@@ -123,3 +123,27 @@ describe('taking a unit away', () => {
     expect(after.map((piece) => piece.footprint)).toEqual(before.slice(1).map((piece) => piece.footprint))
   })
 })
+
+describe('a backless straight beside a backed one', () => {
+  const BACKLESS: PieceDefinition = {
+    pieceId: 'backless',
+    shape: { kind: 'straight', closedLeft: false, closedRight: false, backless: true },
+    widthMm: 660,
+    depthMm: 520,
+  }
+  const BACKED: PieceDefinition = {
+    pieceId: 'backed',
+    shape: { kind: 'straight', closedLeft: false, closedRight: false },
+    widthMm: 660,
+    depthMm: 660,
+  }
+  const DEFINITIONS = new Map([BACKLESS, BACKED].map((definition) => [definition.pieceId, definition]))
+
+  it('lines their seat fronts up even when the backless module is shallower', () => {
+    const placed = placeChain(chainOf('backless', 'backed', 'backed'), DEFINITIONS)
+    const fronts = placed.map((piece) => piece.footprint.maxZ)
+    expect(fronts[0]).toBe(fronts[1])
+    expect(fronts[1]).toBe(fronts[2])
+    expect(fronts[0]).toBe(260)
+  })
+})

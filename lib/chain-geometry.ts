@@ -71,7 +71,8 @@ export type PieceShape =
       closedLeft: boolean
       /** An arm or end panel on the right: nothing can join after this piece. */
       closedRight: boolean
-      /** No backrest at all. Joins exactly like a backed unit; drawn without one. */
+      /** No backrest. Side joins align seat fronts, not backs, so a shallower
+       *  module sits flush with its neighbours' fronts rather than its rear edge. */
       backless?: boolean
     }
   | {
@@ -312,6 +313,32 @@ export function acceptsJoinAfter(definition: PieceDefinition): boolean {
   return definition.shape.kind !== 'straight' || !definition.shape.closedRight
 }
 
+function isStraightBackless(definition: PieceDefinition): boolean {
+  return definition.shape.kind === 'straight' && definition.shape.backless === true
+}
+
+/**
+ * Straight runs align seat fronts when a backless module joins another straight
+ * piece. Curves and corners still meet at the back edge.
+ */
+function straightJoinUsesSeatFront(previous: PieceDefinition, next: PieceDefinition): boolean {
+  if (previous.shape.kind !== 'straight' || next.shape.kind !== 'straight') return false
+  const prevBackless = isStraightBackless(previous)
+  const nextBackless = isStraightBackless(next)
+  // Backless-to-backless keeps back alignment (curved runs of stools, and equal
+  // depth where it makes no difference). Mixed runs align seat fronts.
+  return prevBackless !== nextBackless
+}
+
+/** Corner on a side face to glue: back end by default, seat front for backless straight runs. */
+function joinAnchorOnFace(face: JoinFace, definition: PieceDefinition, seatFront: boolean): FloorVector {
+  if (!seatFront || definition.shape.kind !== 'straight') return face.backCorner
+  return {
+    x: face.backCorner.x,
+    z: roundMillimetre(face.backCorner.z + face.towardsFront.z * definition.depthMm),
+  }
+}
+
 function transformFace(face: JoinFace, pose: PiecePose): JoinFace {
   const rotatedCorner = rotateOnFloor(face.backCorner, pose.rotationY)
   return {
@@ -328,15 +355,23 @@ function transformFace(face: JoinFace, pose: PiecePose): JoinFace {
  * Pose that glues `definition`'s entry face onto `previousExit` (world frame):
  * faces back to back, back ends touching, fronts running the same way.
  */
-function poseJoinedAfter(previousExit: JoinFace, definition: PieceDefinition, flipped: boolean | undefined): PiecePose {
+function poseJoinedAfter(
+  previousExit: JoinFace,
+  previousDefinition: PieceDefinition,
+  definition: PieceDefinition,
+  flipped: boolean | undefined,
+): PiecePose {
+  const seatFront = straightJoinUsesSeatFront(previousDefinition, definition)
+  const previousAnchor = joinAnchorOnFace(previousExit, previousDefinition, seatFront)
   const entry = entryFaceOf(definition, flipped)
+  const entryAnchor = joinAnchorOnFace(entry, definition, seatFront)
   const facingBack = { x: -previousExit.outward.x, z: -previousExit.outward.z }
   const rotationY = snapToQuarterTurn(headingOf(facingBack) - headingOf(entry.outward))
-  const rotatedCorner = rotateOnFloor(entry.backCorner, rotationY)
+  const rotatedAnchor = rotateOnFloor(entryAnchor, rotationY)
   return {
     centre: {
-      x: roundMillimetre(previousExit.backCorner.x - rotatedCorner.x),
-      z: roundMillimetre(previousExit.backCorner.z - rotatedCorner.z),
+      x: roundMillimetre(previousAnchor.x - rotatedAnchor.x),
+      z: roundMillimetre(previousAnchor.z - rotatedAnchor.z),
     },
     rotationY,
   }
@@ -369,14 +404,16 @@ export function placeChain(
 ): PlacedPiece[] {
   const placed: PlacedPiece[] = []
   let previousExit: JoinFace | null = null
+  let previousDefinition: PieceDefinition | null = null
   for (const entry of chain) {
     const definition = definitions.get(entry.pieceId)
     if (!definition) throw new UnknownPieceError(entry.pieceId)
-    const pose: PiecePose = previousExit
-      ? poseJoinedAfter(previousExit, definition, entry.flipped)
+    const pose: PiecePose = previousExit && previousDefinition
+      ? poseJoinedAfter(previousExit, previousDefinition, definition, entry.flipped)
       : { centre: { x: 0, z: 0 }, rotationY: 0 }
     placed.push({ entry, definition, pose, footprint: footprintAt(definition, pose) })
     previousExit = transformFace(exitFaceOf(definition, entry.flipped), pose)
+    previousDefinition = definition
   }
   return placed
 }

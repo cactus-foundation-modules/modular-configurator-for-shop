@@ -38,6 +38,7 @@ export interface LayoutStageSnapshot {
   labelFor: (pieceId: string) => string
   onSelectUnit: (entryId: string | null) => void
   onPickGhost: (end: ChainEnd) => void
+  onRemoveUnit: (entryId: string) => void
 }
 
 export interface LayoutStageState {

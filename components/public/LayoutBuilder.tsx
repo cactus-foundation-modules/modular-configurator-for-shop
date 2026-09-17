@@ -170,6 +170,21 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
     },
     [dispatch],
   )
+  const removeUnit = useCallback(
+    (entryId: string) => {
+      setPickerEnd(null)
+      dispatch({ type: 'remove', entryId })
+      dispatch({ type: 'select', entryId: null })
+    },
+    [dispatch],
+  )
+  const addUnit = useCallback(
+    (end: ChainEnd, pieceId: string) => {
+      dispatch({ type: 'add', end, pieceId })
+      setPickerEnd(end)
+    },
+    [dispatch],
+  )
 
   // What the layout view draws, published for the gallery (or the inline view)
   // to pick up. Null until a layout is started: before that the gallery keeps
@@ -194,8 +209,9 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       labelFor,
       onSelectUnit: selectUnit,
       onPickGhost: openPicker,
+      onRemoveUnit: removeUnit,
     }
-  }, [started, view, builder.editCount, builder.placed, builder.selectedEntryId, activeTab, storefront, pieceById, ghosts, isEmpty, labelFor, selectUnit, openPicker])
+  }, [started, view, builder.editCount, builder.placed, builder.selectedEntryId, activeTab, storefront, pieceById, ghosts, isEmpty, labelFor, selectUnit, openPicker, removeUnit])
 
   useEffect(() => {
     publishLayoutStage(storefront.slug, snapshot)
@@ -247,6 +263,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       pickerEnd={pickerEnd}
       onOpenPicker={openPicker}
       onClosePicker={() => setPickerEnd(null)}
+      onAddUnit={addUnit}
       onSelectUnit={selectUnit}
       layoutChoices={layoutChoices}
       statusText={statusText}

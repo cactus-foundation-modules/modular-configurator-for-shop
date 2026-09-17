@@ -47,6 +47,7 @@ interface LayoutWorkspaceProps {
   pickerEnd: ChainEnd | null
   onOpenPicker: (end: ChainEnd) => void
   onClosePicker: () => void
+  onAddUnit: (end: ChainEnd, pieceId: string) => void
   onSelectUnit: (entryId: string | null) => void
   layoutChoices: OptionSelection
   statusText: string | null
@@ -73,6 +74,7 @@ export function LayoutWorkspace({
   pickerEnd,
   onOpenPicker,
   onClosePicker,
+  onAddUnit,
   onSelectUnit,
   layoutChoices,
   statusText,
@@ -169,10 +171,7 @@ export function LayoutWorkspace({
               priceFor={priceOfPieceAlone}
               currencySymbol={currencySymbol}
               maxPieces={storefront.maxPieces}
-              onPick={(pieceId) => {
-                dispatch({ type: 'add', end: openEnd, pieceId })
-                onClosePicker()
-              }}
+              onPick={(pieceId) => onAddUnit(openEnd, pieceId)}
               onCancel={isEmpty ? undefined : onClosePicker}
             />
           </div>
