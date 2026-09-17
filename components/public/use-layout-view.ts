@@ -6,7 +6,7 @@
 // over the builder's draft and the page's variation payload - no state of its own.
 import { useMemo } from 'react'
 import { candidatesAtEnd, endPlan, type EndCandidate } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import type { ChainEnd, PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { layoutEntriesExpanded, layoutPieceCount, type ChainEnd, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { encodeLayout } from '@/modules/modular-configurator-for-shop/lib/layout-code'
 import {
   describeArrangement,
@@ -93,7 +93,8 @@ export function useLayoutView(
     if (!payload) return null
     const pieceById = pieceLookup(storefront.pieces)
     const labelOf = (pieceId: string) => pieceById.get(pieceId)?.label ?? 'Unit'
-    const labels = draft.chain.map((entry) => labelOf(entry.pieceId))
+    const expanded = layoutEntriesExpanded(draft.chain)
+    const labels = expanded.map((entry) => labelOf(entry.pieceId))
     const price = priceLayout(payload, storefront.pieceOptionId, draft.chain, layoutChoices, draft.unitChoices)
     const footprint = footprintOfLayout(placed)
     const limits = { maxPieces: storefront.maxPieces }
@@ -126,12 +127,18 @@ export function useLayoutView(
       depthText: footprint ? formatMetres(footprint.depthMm) : '',
       countsText: describeUnitCounts(labels),
       arrangementText: describeArrangement(labels),
-      unitCountText: unitCountLabel(draft.chain.length),
+      unitCountText: unitCountLabel(layoutPieceCount(draft.chain)),
       code: encodeLayout(
         draft.chain.map((entry) => ({
           pieceId: entry.pieceId,
           choices: draft.unitChoices[entry.entryId] ?? {},
           flipped: entry.flipped === true,
+          front: entry.frontSpur
+            ? {
+                pieceId: entry.frontSpur.pieceId,
+                choices: draft.unitChoices[entry.frontSpur.entryId] ?? {},
+              }
+            : undefined,
         })),
         {
           pieceSlugById: new Map(storefront.pieces.map((piece) => [piece.pieceId, piece.valueSlug])),

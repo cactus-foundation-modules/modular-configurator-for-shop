@@ -10,13 +10,18 @@ import {
   acceptsJoinAfter,
   acceptsJoinBefore,
   anchorLayout,
+  canBeFrontSpur,
+  canHostFrontSpur,
   footprintAt,
   isReversible,
   layoutIsClosed,
+  layoutPieceCount,
   piecesOverlap,
   placeChain,
+  placeLayout,
   type ChainEnd,
   type ChainEntry,
+  type FrontSpur,
   type PieceDefinition,
   type PiecePose,
   type PlacedPiece,
@@ -69,15 +74,20 @@ export function findChainProblem(
   definitions: ReadonlyMap<string, PieceDefinition>,
   limits: ChainLimits,
 ): EditRefusal | null {
-  if (chain.length > limits.maxPieces) return 'too-many-pieces'
+  if (layoutPieceCount(chain) > limits.maxPieces) return 'too-many-pieces'
   let previous: PieceDefinition | null = null
   for (const entry of chain) {
     const definition = definitions.get(entry.pieceId)
     if (!definition) return 'unknown-piece'
     if (previous && !canJoin(previous, definition)) return 'neighbours-cannot-join'
+    if (entry.frontSpur) {
+      const spurDefinition = definitions.get(entry.frontSpur.pieceId)
+      if (!spurDefinition) return 'unknown-piece'
+      if (!canHostFrontSpur(definition) || !canBeFrontSpur(spurDefinition)) return 'would-overlap'
+    }
     previous = definition
   }
-  const placed = placeChain(chain, definitions)
+  const placed = placeLayout(chain, definitions)
   return anyFootprintsOverlap(placed) ? 'would-overlap' : null
 }
 
@@ -182,7 +192,7 @@ export function candidatesAtEnd(
     })
     const fitting = trials.find((candidate) => candidate.problem === null) ?? trials[0]
     const trial = fitting?.trialChain ?? chain
-    const refusal = placed.length >= limits.maxPieces ? 'too-many-pieces' : (fitting?.problem ?? null)
+    const refusal = layoutPieceCount(chain) >= limits.maxPieces ? 'too-many-pieces' : (fitting?.problem ?? null)
     const trialPlaced = anchorLayout(placeChain(trial, byId), placed, plan.displacedEntryId)
     const marker = trialPlaced.find((piece) => piece.entry.entryId === PROBE_ENTRY_ID)
     const pose = marker?.pose ?? ORIGIN_POSE
@@ -211,7 +221,7 @@ export function addAtEnd(
   if (!definitions.has(entry.pieceId)) return { ok: false, refusal: 'unknown-piece' }
   const plan = endPlan(chain, end, definitions)
   if (!plan) return { ok: false, refusal: isClosedChain(chain, definitions) ? 'layout-is-closed' : 'end-is-closed' }
-  if (chain.length >= limits.maxPieces) return { ok: false, refusal: 'too-many-pieces' }
+  if (layoutPieceCount(chain) >= limits.maxPieces) return { ok: false, refusal: 'too-many-pieces' }
   let firstRefusal: EditRefusal | null = null
   for (const laid of waysToLay(entry, definitions)) {
     const trial = insertedAt(chain, plan.insertAt, laid)
@@ -229,6 +239,13 @@ export function removeEntry(
   definitions: ReadonlyMap<string, PieceDefinition>,
   limits: ChainLimits,
 ): EditResult {
+  const spurHost = chain.find((entry) => entry.frontSpur?.entryId === entryId)
+  if (spurHost) {
+    const next = chain.map((entry) =>
+      entry.entryId === spurHost.entryId ? { entryId: entry.entryId, pieceId: entry.pieceId, flipped: entry.flipped } : entry,
+    )
+    return checked(next, definitions, limits)
+  }
   const index = chain.findIndex((entry) => entry.entryId === entryId)
   if (index === -1) return { ok: false, refusal: 'unknown-entry' }
   return checked(
@@ -236,6 +253,51 @@ export function removeEntry(
     definitions,
     limits,
   )
+}
+
+/** Puts a backless unit on the front edge of a backed straight module. */
+export function addFrontSpur(
+  chain: readonly ChainEntry[],
+  hostEntryId: string,
+  spur: FrontSpur,
+  definitions: ReadonlyMap<string, PieceDefinition>,
+  limits: ChainLimits,
+): EditResult {
+  if (layoutPieceCount(chain) >= limits.maxPieces) return { ok: false, refusal: 'too-many-pieces' }
+  const host = chain.find((entry) => entry.entryId === hostEntryId)
+  if (!host) return { ok: false, refusal: 'unknown-entry' }
+  if (host.frontSpur) return { ok: false, refusal: 'would-overlap' }
+  const hostDefinition = definitions.get(host.pieceId)
+  const spurDefinition = definitions.get(spur.pieceId)
+  if (!hostDefinition || !spurDefinition) return { ok: false, refusal: 'unknown-piece' }
+  if (!canHostFrontSpur(hostDefinition) || !canBeFrontSpur(spurDefinition)) return { ok: false, refusal: 'would-overlap' }
+  const next = chain.map((entry) => (entry.entryId === hostEntryId ? { ...entry, frontSpur: spur } : entry))
+  return checked(next, definitions, limits)
+}
+
+/** Backless piece types that may sit in front of this host. */
+export function frontSpurOptions(
+  chain: readonly ChainEntry[],
+  hostEntryId: string,
+  definitions: readonly PieceDefinition[],
+  limits: ChainLimits,
+): PieceDefinition[] {
+  const host = chain.find((entry) => entry.entryId === hostEntryId)
+  const hostDefinition = host ? definitions.find((definition) => definition.pieceId === host.pieceId) : undefined
+  if (!host?.frontSpur && host && hostDefinition && canHostFrontSpur(hostDefinition)) {
+    return definitions.filter(
+      (definition) =>
+        canBeFrontSpur(definition) &&
+        addFrontSpur(
+          chain,
+          hostEntryId,
+          { entryId: `${hostEntryId}:probe`, pieceId: definition.pieceId },
+          new Map(definitions.map((d) => [d.pieceId, d])),
+          limits,
+        ).ok,
+    )
+  }
+  return []
 }
 
 /**
@@ -255,7 +317,12 @@ export function replaceEntry(
   let firstRefusal: EditResult | null = null
   for (const laid of waysToLay(replacement, definitions)) {
     const next = [...chain]
-    next[index] = laid
+    const replacementDefinition = definitions.get(laid.pieceId)
+    const carried = next[index]?.frontSpur
+    next[index] =
+      carried && replacementDefinition && canHostFrontSpur(replacementDefinition)
+        ? { ...laid, frontSpur: carried }
+        : laid
     const result = checked(next, definitions, limits)
     if (result.ok) return result
     firstRefusal ??= result
@@ -281,6 +348,50 @@ export function flipEntry(
   return checked(next, definitions, limits)
 }
 
+/** Host entry when `entryId` is a front spur; null for main-chain entries. */
+export function hostEntryIdForSpur(chain: readonly ChainEntry[], spurEntryId: string): string | null {
+  const host = chain.find((entry) => entry.frontSpur?.entryId === spurEntryId)
+  return host?.entryId ?? null
+}
+
+/** Piece types a front spur could be swapped for. */
+export function swapSpurOptions(
+  chain: readonly ChainEntry[],
+  spurEntryId: string,
+  definitions: ReadonlyMap<string, PieceDefinition>,
+  limits: ChainLimits,
+): PieceDefinition[] {
+  const hostId = hostEntryIdForSpur(chain, spurEntryId)
+  if (!hostId) return []
+  const host = chain.find((entry) => entry.entryId === hostId)
+  const currentId = host?.frontSpur?.pieceId
+  if (!currentId) return []
+  return [...definitions.values()].filter(
+    (definition) =>
+      definition.pieceId !== currentId &&
+      replaceFrontSpur(chain, hostId, definition.pieceId, definitions, limits).ok,
+  )
+}
+
+/** Swaps the piece type of a front spur on its host. */
+export function replaceFrontSpur(
+  chain: readonly ChainEntry[],
+  hostEntryId: string,
+  pieceId: string,
+  definitions: ReadonlyMap<string, PieceDefinition>,
+  limits: ChainLimits,
+): EditResult {
+  const host = chain.find((entry) => entry.entryId === hostEntryId)
+  if (!host?.frontSpur) return { ok: false, refusal: 'unknown-entry' }
+  return addFrontSpur(
+    chain.map((entry) => (entry.entryId === hostEntryId ? { entryId: entry.entryId, pieceId: entry.pieceId, flipped: entry.flipped } : entry)),
+    hostEntryId,
+    { entryId: host.frontSpur.entryId, pieceId },
+    definitions,
+    limits,
+  )
+}
+
 /** Piece types the given entry could be swapped for without breaking the layout. */
 export function swapOptions(
   chain: readonly ChainEntry[],
@@ -288,6 +399,8 @@ export function swapOptions(
   definitions: ReadonlyMap<string, PieceDefinition>,
   limits: ChainLimits,
 ): PieceDefinition[] {
+  const spurHost = hostEntryIdForSpur(chain, entryId)
+  if (spurHost) return swapSpurOptions(chain, entryId, definitions, limits)
   const current = chain.find((entry) => entry.entryId === entryId)
   if (!current) return []
   return [...definitions.values()].filter(

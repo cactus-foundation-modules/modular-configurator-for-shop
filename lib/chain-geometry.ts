@@ -106,6 +106,12 @@ export interface PieceDefinition {
   depthMm: number
 }
 
+/** A backless module on the front edge of a backed straight unit (a cube / ottoman). */
+export interface FrontSpur {
+  entryId: string
+  pieceId: string
+}
+
 /** One placed piece of a layout, as the shopper built it. */
 export interface ChainEntry {
   /** Unique within the layout; survives reordering so animations can track it. */
@@ -113,6 +119,8 @@ export interface ChainEntry {
   pieceId: string
   /** A reversible piece (a curve or half curve with no back) laid the other way round. */
   flipped?: boolean
+  /** Backless unit in front of this one's seat (backed straights only). */
+  frontSpur?: FrontSpur
 }
 
 /** Where one piece sits on the floor. `rotationY` matches three.js `rotation.y`. */
@@ -438,6 +446,103 @@ export function placeChain(
     previousDefinition = definition
   }
   return placed
+}
+
+export function canHostFrontSpur(definition: PieceDefinition): boolean {
+  return definition.shape.kind === 'straight' && definition.shape.backless !== true
+}
+
+export function canBeFrontSpur(definition: PieceDefinition): boolean {
+  return definition.shape.kind === 'straight' && definition.shape.backless === true
+}
+
+/** Chain units plus any front spurs (for size limits and pricing). */
+export function layoutPieceCount(chain: readonly ChainEntry[]): number {
+  return chain.length + chain.filter((entry) => entry.frontSpur).length
+}
+
+function spurEntryIds(chain: readonly ChainEntry[]): Set<string> {
+  return new Set(chain.flatMap((entry) => (entry.frontSpur ? [entry.frontSpur.entryId] : [])))
+}
+
+function placeFrontSpur(host: PlacedPiece, spur: FrontSpur, definition: PieceDefinition): PlacedPiece {
+  const offset = rotateOnFloor(
+    { x: 0, z: host.definition.depthMm / 2 + definition.depthMm / 2 },
+    host.pose.rotationY,
+  )
+  const pose: PiecePose = {
+    centre: {
+      x: roundMillimetre(host.pose.centre.x + offset.x),
+      z: roundMillimetre(host.pose.centre.z + offset.z),
+    },
+    rotationY: host.pose.rotationY,
+  }
+  return {
+    entry: { entryId: spur.entryId, pieceId: spur.pieceId },
+    definition,
+    pose,
+    footprint: footprintAt(definition, pose),
+  }
+}
+
+/** Main chain plus any front spurs attached to hosts. */
+export function placeLayout(
+  chain: readonly ChainEntry[],
+  definitions: ReadonlyMap<string, PieceDefinition>,
+): PlacedPiece[] {
+  const main = placeChain(chain, definitions)
+  const byHost = new Map(main.map((piece) => [piece.entry.entryId, piece]))
+  const spurs: PlacedPiece[] = []
+  for (const entry of chain) {
+    const spur = entry.frontSpur
+    if (!spur) continue
+    const host = byHost.get(entry.entryId)
+    const definition = definitions.get(spur.pieceId)
+    if (host && definition) spurs.push(placeFrontSpur(host, spur, definition))
+  }
+  return [...main, ...spurs]
+}
+
+/** Re-anchors the chain, then re-attaches front spurs to their hosts. */
+export function commitPlacement(
+  chain: readonly ChainEntry[],
+  definitions: ReadonlyMap<string, PieceDefinition>,
+  placedBefore: readonly PlacedPiece[],
+  movedEntryId: string | null = null,
+): PlacedPiece[] {
+  const spurIds = spurEntryIds(chain)
+  const mainBefore = placedBefore.filter((piece) => !spurIds.has(piece.entry.entryId))
+  const anchoredMain = anchorLayout(placeChain(chain, definitions), mainBefore, movedEntryId)
+  const mainById = new Map(anchoredMain.map((piece) => [piece.entry.entryId, piece]))
+  const mergedMain = placeChain(chain, definitions).map((piece) => mainById.get(piece.entry.entryId) ?? piece)
+  return placeLayoutFromMain(chain, mergedMain, definitions)
+}
+
+function placeLayoutFromMain(
+  chain: readonly ChainEntry[],
+  main: readonly PlacedPiece[],
+  definitions: ReadonlyMap<string, PieceDefinition>,
+): PlacedPiece[] {
+  const byHost = new Map(main.map((piece) => [piece.entry.entryId, piece]))
+  const spurs: PlacedPiece[] = []
+  for (const entry of chain) {
+    const spur = entry.frontSpur
+    if (!spur) continue
+    const host = byHost.get(entry.entryId)
+    const definition = definitions.get(spur.pieceId)
+    if (host && definition) spurs.push(placeFrontSpur(host, spur, definition))
+  }
+  return [...main, ...spurs]
+}
+
+/** Every unit that prices and ships, in list order (hosts then their spurs). */
+export function layoutEntriesExpanded(chain: readonly ChainEntry[]): ChainEntry[] {
+  const expanded: ChainEntry[] = []
+  for (const entry of chain) {
+    expanded.push(entry)
+    if (entry.frontSpur) expanded.push({ entryId: entry.frontSpur.entryId, pieceId: entry.frontSpur.pieceId })
+  }
+  return expanded
 }
 
 function sameFloorPoint(first: FloorVector, second: FloorVector): boolean {

@@ -12,18 +12,22 @@
 import { useMemo, useReducer } from 'react'
 import {
   addAtEnd,
+  addFrontSpur,
   flipEntry,
+  hostEntryIdForSpur,
   removeEntry,
   replaceEntry,
+  replaceFrontSpur,
   type ChainLimits,
   type EditRefusal,
   type EditResult,
 } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import {
-  anchorLayout,
-  placeChain,
+  commitPlacement,
+  layoutPieceCount,
   type ChainEnd,
   type ChainEntry,
+  type FrontSpur,
   type PieceDefinition,
   type PlacedPiece,
 } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
@@ -47,8 +51,18 @@ interface BuilderState {
 }
 
 export type BuilderAction =
-  | { type: 'start-from'; units: ReadonlyArray<{ pieceId: string; choices?: OptionSelection; flipped?: boolean }>; byShopper: boolean }
+  | {
+      type: 'start-from'
+      units: ReadonlyArray<{
+        pieceId: string
+        choices?: OptionSelection
+        flipped?: boolean
+        front?: { pieceId: string; choices?: OptionSelection }
+      }>
+      byShopper: boolean
+    }
   | { type: 'add'; end: ChainEnd; pieceId: string }
+  | { type: 'add-front-spur'; hostEntryId: string; pieceId: string }
   | { type: 'remove'; entryId: string }
   | { type: 'swap'; entryId: string; pieceId: string }
   | { type: 'flip'; entryId: string }
@@ -65,11 +79,15 @@ function entryIdFor(number: number): string {
   return `u${number}`
 }
 
+function entryIdsInLayout(chain: readonly ChainEntry[]): string[] {
+  return chain.flatMap((entry) => [entry.entryId, ...(entry.frontSpur ? [entry.frontSpur.entryId] : [])])
+}
+
 function keepChoicesFor(chain: readonly ChainEntry[], unitChoices: Record<string, OptionSelection>): Record<string, OptionSelection> {
   const kept: Record<string, OptionSelection> = {}
-  for (const entry of chain) {
-    const choices = unitChoices[entry.entryId]
-    if (choices && Object.keys(choices).length > 0) kept[entry.entryId] = choices
+  for (const entryId of entryIdsInLayout(chain)) {
+    const choices = unitChoices[entryId]
+    if (choices && Object.keys(choices).length > 0) kept[entryId] = choices
   }
   return kept
 }
@@ -87,8 +105,8 @@ function initialState(): BuilderState {
 function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits: ChainLimits) {
   /** Commits a new draft: re-walks, anchors, pushes the old one onto the undo stack. */
   function commit(state: BuilderState, draft: LayoutDraft, extra: Partial<BuilderState> = {}, movedEntryId: string | null = null): BuilderState {
-    const placed = anchorLayout(placeChain(draft.chain, definitions), state.placed, movedEntryId)
-    const stillSelected = draft.chain.some((entry) => entry.entryId === state.selectedEntryId)
+    const placed = commitPlacement(draft.chain, definitions, state.placed, movedEntryId)
+    const stillSelected = state.selectedEntryId !== null && entryIdsInLayout(draft.chain).includes(state.selectedEntryId)
     return {
       ...state,
       draft: { chain: draft.chain, unitChoices: keepChoicesFor(draft.chain, draft.unitChoices) },
@@ -113,11 +131,18 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
         const chain: ChainEntry[] = []
         const unitChoices: Record<string, OptionSelection> = {}
         action.units.forEach((unit) => {
-          if (!definitions.has(unit.pieceId) || chain.length >= limits.maxPieces) return
+          if (!definitions.has(unit.pieceId) || layoutPieceCount(chain) >= limits.maxPieces) return
           const entryId = entryIdFor(number)
           number += 1
-          chain.push(unit.flipped ? { entryId, pieceId: unit.pieceId, flipped: true } : { entryId, pieceId: unit.pieceId })
+          let entry: ChainEntry = unit.flipped ? { entryId, pieceId: unit.pieceId, flipped: true } : { entryId, pieceId: unit.pieceId }
           if (unit.choices) unitChoices[entryId] = unit.choices
+          if (unit.front && definitions.has(unit.front.pieceId) && layoutPieceCount([...chain, entry]) < limits.maxPieces) {
+            const spurId = entryIdFor(number)
+            number += 1
+            entry = { ...entry, frontSpur: { entryId: spurId, pieceId: unit.front.pieceId } }
+            if (unit.front.choices) unitChoices[spurId] = unit.front.choices
+          }
+          chain.push(entry)
         })
         // A fresh start is not anchored on what was there before: a preset is a
         // new layout, not an edit of the old one.
@@ -132,9 +157,21 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
         // a go, and a unit panel opening after each one would be in their way.
         return applyEdit(state, result, { nextEntryNumber: state.nextEntryNumber + 1 })
       }
+      case 'add-front-spur': {
+        const spurId = entryIdFor(state.nextEntryNumber)
+        const spur: FrontSpur = { entryId: spurId, pieceId: action.pieceId }
+        const result = addFrontSpur(state.draft.chain, action.hostEntryId, spur, definitions, limits)
+        return applyEdit(state, result, { nextEntryNumber: state.nextEntryNumber + 1, selectedEntryId: spurId })
+      }
       case 'remove':
         return applyEdit(state, removeEntry(state.draft.chain, action.entryId, definitions, limits))
       case 'swap': {
+        const spurHost = hostEntryIdForSpur(state.draft.chain, action.entryId)
+        if (spurHost) {
+          const result = replaceFrontSpur(state.draft.chain, spurHost, action.pieceId, definitions, limits)
+          if (!result.ok) return { ...state, refusal: result.refusal }
+          return commit(state, { chain: result.chain, unitChoices: state.draft.unitChoices }, { selectedEntryId: action.entryId })
+        }
         const entryId = entryIdFor(state.nextEntryNumber)
         const result = replaceEntry(state.draft.chain, action.entryId, { entryId, pieceId: action.pieceId }, definitions, limits)
         if (!result.ok) return { ...state, refusal: result.refusal }
@@ -159,7 +196,7 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
         return {
           ...state,
           draft: previous,
-          placed: anchorLayout(placeChain(previous.chain, definitions), state.placed),
+          placed: commitPlacement(previous.chain, definitions, state.placed),
           history: state.history.slice(0, -1),
           selectedEntryId: null,
           refusal: null,

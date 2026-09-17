@@ -4,7 +4,7 @@
 // uses, so a unit costs in the builder exactly what it costs on its own.
 import { resolveVariant, type OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
 import type { VariantSelectorPayload, VariantSelectorVariant } from '@/modules/shop-variations/lib/types'
-import type { ChainEntry } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { layoutEntriesExpanded, type ChainEntry } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 
 /** Why one unit of a layout cannot be bought as it stands. */
 export type UnitProblem =
@@ -170,7 +170,8 @@ export function layoutValueReachesAUnit(
   optionId: string,
   valueId: string,
 ): boolean {
-  const followers = chain.filter((entry) => !unitChoices[entry.entryId]?.[optionId])
+  const expanded = layoutEntriesExpanded(chain)
+  const followers = expanded.filter((entry) => !unitChoices[entry.entryId]?.[optionId])
   if (followers.length === 0) return true
   return followers.some((entry) => unitIsMadeIn(payload, pieceOptionId, entry.pieceId, optionId, valueId, unitChoices[entry.entryId] ?? {}))
 }
@@ -190,7 +191,9 @@ export function priceLayout(
   layoutChoices: OptionSelection,
   unitChoices: Readonly<Record<string, OptionSelection>>,
 ): LayoutPrice {
-  const units = chain.map((entry) => priceUnit(payload, entry, pieceOptionId, layoutChoices, unitChoices[entry.entryId]))
+  const units = layoutEntriesExpanded(chain).map((entry) =>
+    priceUnit(payload, entry, pieceOptionId, layoutChoices, unitChoices[entry.entryId]),
+  )
   const resolved = units.flatMap((unit) => (unit.variant ? [unit.variant] : []))
   const total = sumOf(resolved.map((variant) => variant.price))
   const allResolved = resolved.length === units.length && units.length > 0

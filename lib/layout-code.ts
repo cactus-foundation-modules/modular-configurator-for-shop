@@ -23,12 +23,20 @@ const UNIT_SEPARATOR = '.'
 const CHOICE_SEPARATOR = '~'
 const PAIR_SEPARATOR = ':'
 const FLIP_MARK = 'flip'
+const FRONT_MARK = 'front'
+
+/** A backless unit on the front edge of the host in this segment. */
+export interface LayoutCodeFrontSpur {
+  pieceId: string
+  choices: OptionSelection
+}
 
 /** One unit as the code carries it. */
 export interface LayoutCodeUnit {
   pieceId: string
   choices: OptionSelection
   flipped: boolean
+  front?: LayoutCodeFrontSpur
 }
 
 /** A layout as the code carries it: its units in order. */
@@ -48,20 +56,31 @@ export function encodeLayout(units: readonly LayoutCodeUnit[], vocabulary: Layou
     .map((unit) => {
       const slug = vocabulary.pieceSlugById.get(unit.pieceId)
       if (!slug) return null
-      const parts = [slug, ...(unit.flipped ? [FLIP_MARK] : []), ...encodeChoices(unit.choices, vocabulary.otherOptions)]
+      const frontSlug = unit.front ? vocabulary.pieceSlugById.get(unit.front.pieceId) : null
+      const parts = [
+        slug,
+        ...(unit.flipped ? [FLIP_MARK] : []),
+        ...(frontSlug ? [`${FRONT_MARK}${PAIR_SEPARATOR}${frontSlug}`] : []),
+        ...encodeChoices(unit.choices, vocabulary.otherOptions),
+        ...(unit.front ? encodeChoices(unit.front.choices, vocabulary.otherOptions, `${FRONT_MARK}-`) : []),
+      ]
       return parts.join(CHOICE_SEPARATOR)
     })
     .filter((unit): unit is string => unit !== null)
     .join(UNIT_SEPARATOR)
 }
 
-function encodeChoices(choices: OptionSelection, options: readonly SvrOptionWithValues[]): string[] {
+function encodeChoices(
+  choices: OptionSelection,
+  options: readonly SvrOptionWithValues[],
+  keyPrefix = '',
+): string[] {
   const pairs: string[] = []
   for (const option of options) {
     const valueId = choices[option.id]
     if (!valueId) continue
     const value = option.values.find((candidate) => candidate.id === valueId)
-    if (value) pairs.push(`${optionParamKey(option.name)}${PAIR_SEPARATOR}${value.slug}`)
+    if (value) pairs.push(`${keyPrefix}${optionParamKey(option.name)}${PAIR_SEPARATOR}${value.slug}`)
   }
   return pairs
 }
@@ -80,7 +99,20 @@ export function decodeLayout(code: string, vocabulary: LayoutCodeVocabulary): De
     const pieceId = pieceIdBySlug.get(parts[0] ?? '')
     if (!pieceId) continue
     const rest = parts.slice(1)
-    units.push({ pieceId, choices: decodeChoices(rest, optionByKey), flipped: rest.includes(FLIP_MARK) })
+    const flipped = rest.includes(FLIP_MARK)
+    const frontPart = rest.find((part) => part.startsWith(`${FRONT_MARK}${PAIR_SEPARATOR}`))
+    const frontSlug = frontPart?.slice(FRONT_MARK.length + 1)
+    const frontPieceId = frontSlug ? pieceIdBySlug.get(frontSlug) : undefined
+    const hostPairs = rest.filter(
+      (part) => part !== FLIP_MARK && part !== frontPart && !part.startsWith(`${FRONT_MARK}-`),
+    )
+    const spurPairs = rest.filter((part) => part.startsWith(`${FRONT_MARK}-`)).map((part) => part.slice(FRONT_MARK.length + 1))
+    units.push({
+      pieceId,
+      choices: decodeChoices(hostPairs, optionByKey),
+      flipped,
+      front: frontPieceId ? { pieceId: frontPieceId, choices: decodeChoices(spurPairs, optionByKey) } : undefined,
+    })
   }
   return units.length > 0 ? { units } : null
 }

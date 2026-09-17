@@ -12,7 +12,7 @@
 // LayoutBuilder.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatMoney } from '@/modules/shop/lib/money'
-import { swapOptions } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { frontSpurOptions, hostEntryIdForSpur, swapOptions } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { layoutValueReachesAUnit, priceLayout, unitIsMadeIn } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { refusalSentence, unitProblemSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
@@ -137,8 +137,8 @@ export function LayoutWorkspace({
   const firstProblem = view.price.units.find((unit) => unit.problem !== null)
   const addBlockedBecause = isEmpty
     ? 'Add a unit to start'
-    : firstProblem?.problem
-      ? `Unit ${draft.chain.indexOf(firstProblem.entry) + 1}: ${unitProblemSentence(firstProblem.problem)}`
+      : firstProblem?.problem
+      ? `Unit ${view.price.units.indexOf(firstProblem) + 1}: ${unitProblemSentence(firstProblem.problem)}`
       : null
 
   return (
@@ -223,6 +223,12 @@ export function LayoutWorkspace({
               const definition = definitions.get(unit.entry.pieceId)
               const selected = unit.entry.entryId === selectedEntryId
               const panelId = `mcf-unit-panel-${unit.entry.entryId}`
+              const spurHostId = hostEntryIdForSpur(draft.chain, unit.entry.entryId)
+              const isFrontSpur = spurHostId !== null
+              const frontSpurChoices =
+                !isFrontSpur && definition
+                  ? frontSpurOptions(draft.chain, unit.entry.entryId, [...definitions.values()], { maxPieces: storefront.maxPieces })
+                  : []
               return (
                 <li key={unit.entry.entryId} className="mcf-unit" data-selected={selected}>
                   <span className="mcf-unit-number" aria-hidden="true">
@@ -255,7 +261,13 @@ export function LayoutWorkspace({
                         ownChoices={own}
                         madeIn={unit.selection}
                         adjustedOptionIds={unit.adjustedOptionIds}
-                        onFlip={definition && isReversible(definition) ? () => dispatch({ type: 'flip', entryId: unit.entry.entryId }) : undefined}
+                        onFlip={definition && isReversible(definition) && !isFrontSpur ? () => dispatch({ type: 'flip', entryId: unit.entry.entryId }) : undefined}
+                        frontSpurTo={frontSpurChoices}
+                        onAddFrontSpur={
+                          frontSpurChoices.length > 0
+                            ? (pieceId) => dispatch({ type: 'add-front-spur', hostEntryId: unit.entry.entryId, pieceId })
+                            : undefined
+                        }
                         isMadeIn={(optionId, valueId) => unitIsMadeIn(payload, storefront.pieceOptionId, unit.entry.pieceId, optionId, valueId, own)}
                         onSwap={(pieceId) => dispatch({ type: 'swap', entryId: unit.entry.entryId, pieceId })}
                         onChoose={(optionId, valueId) => dispatch({ type: 'set-unit-choice', entryId: unit.entry.entryId, optionId, valueId })}
@@ -311,7 +323,7 @@ export function LayoutWorkspace({
           {delivery ? (
             <LayoutDeliveryPicker
               delivery={delivery}
-              itemCount={draft.chain.length * layoutQuantity}
+              itemCount={view.price.units.length * layoutQuantity}
               layoutQuantity={layoutQuantity}
               currencySymbol={currencySymbol}
               onChange={setDeliveryChoice}

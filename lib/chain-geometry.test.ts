@@ -3,6 +3,7 @@ import {
   anchorLayout,
   layoutBounds,
   placeChain,
+  placeLayout,
   type ChainEntry,
   type PieceDefinition,
   type PlacedPiece,
@@ -145,6 +146,35 @@ describe('a backless straight beside a backed one', () => {
     expect(fronts[0]).toBe(fronts[1])
     expect(fronts[1]).toBe(fronts[2])
     expect(fronts[0]).toBe(260)
+  })
+})
+
+describe('a backless cube in front of a backed seat', () => {
+  const BACKLESS: PieceDefinition = {
+    pieceId: 'backless',
+    shape: { kind: 'straight', closedLeft: false, closedRight: false, backless: true },
+    widthMm: 660,
+    depthMm: 520,
+  }
+  const BACKED: PieceDefinition = {
+    pieceId: 'backed',
+    shape: { kind: 'straight', closedLeft: false, closedRight: false },
+    widthMm: 660,
+    depthMm: 660,
+  }
+  const DEFINITIONS = new Map([BACKLESS, BACKED].map((definition) => [definition.pieceId, definition]))
+
+  it('sits on the seat front of its host, not in the side-by-side row', () => {
+    const chain: ChainEntry[] = [
+      { entryId: 'a', pieceId: 'backed' },
+      { entryId: 'b', pieceId: 'backed', frontSpur: { entryId: 's', pieceId: 'backless' } },
+    ]
+    const placed = placeLayout(chain, DEFINITIONS)
+    const host = placed.find((piece) => piece.entry.entryId === 'b')!
+    const spur = placed.find((piece) => piece.entry.entryId === 's')!
+    expect(spur.footprint.minX).toBe(host.footprint.minX)
+    expect(spur.footprint.maxX).toBe(host.footprint.maxX)
+    expect(spur.footprint.minZ).toBe(host.footprint.maxZ)
   })
 })
 

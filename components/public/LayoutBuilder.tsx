@@ -149,7 +149,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       layoutQuantity,
     })
     const layouts = layoutQuantity === 1 ? 'Your layout is' : `${layoutQuantity} of your layout are`
-    setStatusText(`${layouts} in the basket - ${unitCountLabel(builder.draft.chain.length * layoutQuantity)} across ${lines === 1 ? '1 line' : `${lines} lines`}.`)
+    setStatusText(`${layouts} in the basket - ${unitCountLabel(view.price.units.length * layoutQuantity)} across ${lines === 1 ? '1 line' : `${lines} lines`}.`)
   }
 
   const started = designingOwn || builder.draft.chain.length > 0

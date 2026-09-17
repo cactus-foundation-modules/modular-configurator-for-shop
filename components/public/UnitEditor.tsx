@@ -26,6 +26,9 @@ interface UnitEditorProps {
   /** Whether this unit comes in a value at all, keeping its other choices. */
   isMadeIn: (optionId: string, valueId: string) => boolean
   onSwap: (pieceId: string) => void
+  /** Backless types that may sit in front of this backed straight module. */
+  frontSpurTo?: readonly PieceDefinition[]
+  onAddFrontSpur?: (pieceId: string) => void
   onChoose: (optionId: string, valueId: string | null) => void
   onRemove: () => void
   onClose: () => void
@@ -43,6 +46,8 @@ export function UnitEditor({
   onFlip,
   isMadeIn,
   onSwap,
+  frontSpurTo,
+  onAddFrontSpur,
   onChoose,
   onRemove,
   onClose,
@@ -56,6 +61,19 @@ export function UnitEditor({
           <div className="mcf-row">
             {swapTo.map((definition) => (
               <button key={definition.pieceId} type="button" className="mcf-chip" onClick={() => onSwap(definition.pieceId)}>
+                {labelFor(definition.pieceId)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {frontSpurTo && frontSpurTo.length > 0 && onAddFrontSpur ? (
+        <div className="mcf-section">
+          <p className="mcf-section-note">Add a backless cube in front of this seat</p>
+          <div className="mcf-row">
+            {frontSpurTo.map((definition) => (
+              <button key={definition.pieceId} type="button" className="mcf-chip" onClick={() => onAddFrontSpur(definition.pieceId)}>
                 {labelFor(definition.pieceId)}
               </button>
             ))}
