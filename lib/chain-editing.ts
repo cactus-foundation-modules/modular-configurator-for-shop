@@ -59,6 +59,8 @@ export type EditRefusal =
   | 'neighbours-cannot-join'
   /** This range does not stand units in front of one another. */
   | 'front-units-not-offered'
+  /** Only a unit that makes sense on its own (a table, an armchair) can stand away from the layout. */
+  | 'cannot-stand-free'
   | 'unknown-entry'
   | 'unknown-piece'
 
@@ -93,6 +95,12 @@ export interface ChainLimits {
    * edits themselves, and the check a whole chain is put through.
    */
   frontUnits?: boolean
+  /**
+   * Whether this range lets a unit that makes sense on its own (an armchair, a
+   * table) stand anywhere on the floor, away from the layout. Off by default,
+   * like front units. Free units count towards `maxPieces` alongside the chain.
+   */
+  freeUnits?: boolean
 }
 
 /**
@@ -100,11 +108,18 @@ export interface ChainLimits {
  * an open end of the chain, the floor round the corner from a table at one end
  * (`corner:start`, `corner:end`), where the next row can go off its front, or
  * the floor in front of a backed unit (`front:<host entry id>`) where a backless
- * one can stand.
+ * one can stand, or anywhere on the floor for a unit standing on its own
+ * (`free`, see lib/free-units.ts).
  */
-export type SpaceKey = ChainEnd | `corner:${ChainEnd}` | `front:${string}`
+export type SpaceKey = ChainEnd | `corner:${ChainEnd}` | `front:${string}` | typeof FREE_SPACE_KEY
 
-export type LayoutSpace = { kind: 'end'; end: ChainEnd } | { kind: 'corner'; end: ChainEnd } | { kind: 'front'; hostEntryId: string }
+export type LayoutSpace =
+  | { kind: 'end'; end: ChainEnd }
+  | { kind: 'corner'; end: ChainEnd }
+  | { kind: 'front'; hostEntryId: string }
+  | { kind: 'free' }
+
+export const FREE_SPACE_KEY = 'free'
 
 const FRONT_SPACE_PREFIX = 'front:'
 const CORNER_SPACE_KEYS = { start: 'corner:start', end: 'corner:end' } as const satisfies Record<ChainEnd, SpaceKey>
@@ -118,7 +133,7 @@ export function cornerSpaceKey(end: ChainEnd): SpaceKey {
 }
 
 export function isSpaceKey(value: unknown): value is SpaceKey {
-  if (value === 'start' || value === 'end' || value === CORNER_SPACE_KEYS.start || value === CORNER_SPACE_KEYS.end) return true
+  if (value === 'start' || value === 'end' || value === CORNER_SPACE_KEYS.start || value === CORNER_SPACE_KEYS.end || value === FREE_SPACE_KEY) return true
   return typeof value === 'string' && value.startsWith(FRONT_SPACE_PREFIX) && value.length > FRONT_SPACE_PREFIX.length
 }
 
@@ -126,6 +141,7 @@ export function spaceOfKey(key: SpaceKey): LayoutSpace {
   if (key === 'start' || key === 'end') return { kind: 'end', end: key }
   if (key === CORNER_SPACE_KEYS.start) return { kind: 'corner', end: 'start' }
   if (key === CORNER_SPACE_KEYS.end) return { kind: 'corner', end: 'end' }
+  if (key === FREE_SPACE_KEY) return { kind: 'free' }
   return { kind: 'front', hostEntryId: key.slice(FRONT_SPACE_PREFIX.length) }
 }
 

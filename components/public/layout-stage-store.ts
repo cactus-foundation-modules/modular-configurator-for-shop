@@ -11,7 +11,7 @@
 // thumbnail says it is there to host the view. Nothing here decides anything -
 // it only carries state between islands that cannot pass props to each other.
 import { useSyncExternalStore } from 'react'
-import type { PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import type { FloorVector, PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import type { ProductTab } from '@/modules/modular-configurator-for-shop/lib/opening-tab'
 import type { StorefrontPiece, StorefrontViewerLook } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
@@ -25,7 +25,10 @@ export interface LayoutStageSnapshot {
   wanted: boolean
   parentProductId: string
   look: StorefrontViewerLook
+  /** The layout's units, then any standing on their own. */
   placed: readonly PlacedPiece[]
+  /** The units that can be dragged about: those standing on their own. */
+  movableEntryIds: ReadonlySet<string>
   pieceById: ReadonlyMap<string, StorefrontPiece>
   childIdByEntry: ReadonlyMap<string, string | null>
   ghosts: readonly PlanGhost[]
@@ -42,6 +45,10 @@ export interface LayoutStageSnapshot {
   onSelectUnit: (entryId: string | null) => void
   onPickGhost: (key: SpaceKey) => void
   onRemoveUnit: (entryId: string) => void
+  /** Whether a movable unit could stand with its middle at `centre`, for the view to say so while it is dragged. */
+  canMoveUnitTo: (entryId: string, centre: FloorVector) => boolean
+  /** A movable unit put down with its middle at `centre`; false when it cannot stand there, and stays where it was. */
+  onMoveUnit: (entryId: string, centre: FloorVector) => boolean
 }
 
 export interface LayoutStageState {

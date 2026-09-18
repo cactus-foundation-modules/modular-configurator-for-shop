@@ -7,7 +7,7 @@
 // Loaded only through LayoutStageLazy, so three.js reaches a shopper's browser
 // only once they start building a layout.
 import { useEffect, useRef, useState } from 'react'
-import { floorBoundary, layoutBounds, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { floorBoundary, layoutBounds, type FloorVector, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import { LayoutScene, type SceneGhost } from '@/modules/modular-configurator-for-shop/lib/three/layout-scene'
 import { buildUnitModel } from '@/modules/modular-configurator-for-shop/lib/three/unit-model'
@@ -31,6 +31,10 @@ export interface LayoutStageProps {
   onSelectUnit: (entryId: string | null) => void
   onPickGhost: (key: SpaceKey) => void
   onRemoveUnit: (entryId: string) => void
+  /** Units that can be dragged about the floor (those standing on their own). */
+  movableEntryIds: ReadonlySet<string>
+  canMoveUnitTo: (entryId: string, centre: FloorVector) => boolean
+  onMoveUnit: (entryId: string, centre: FloorVector) => boolean
   onLoadingChange: (unitsLoading: number) => void
 }
 
@@ -49,6 +53,7 @@ export function LayoutStage(props: LayoutStageProps) {
     editable,
     widthText,
     depthText,
+    movableEntryIds,
   } = props
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -90,6 +95,8 @@ export function LayoutStage(props: LayoutStageProps) {
         onSelectUnit: (entryId) => callbacksRef.current.onSelectUnit(entryId),
         onPickGhost: (key) => callbacksRef.current.onPickGhost(key),
         onRemoveUnit: (entryId) => callbacksRef.current.onRemoveUnit(entryId),
+        canMoveUnitTo: (entryId, centre) => callbacksRef.current.canMoveUnitTo(entryId, centre),
+        onMoveUnit: (entryId, centre) => callbacksRef.current.onMoveUnit(entryId, centre),
         onLoadingChange: (count) => callbacksRef.current.onLoadingChange(count),
         onContextLost: () => setStatus('lost'),
       },
@@ -164,6 +171,10 @@ export function LayoutStage(props: LayoutStageProps) {
   useEffect(() => {
     if (status === 'ready') sceneRef.current?.setEditable(editable)
   }, [status, editable])
+
+  useEffect(() => {
+    if (status === 'ready') sceneRef.current?.setMovable(movableEntryIds)
+  }, [status, movableEntryIds])
 
   useEffect(() => {
     if (status === 'ready') sceneRef.current?.setDimensionsVisible(showDimensions)

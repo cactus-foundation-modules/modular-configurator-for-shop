@@ -26,6 +26,7 @@ interface LayoutStageViewProps {
 }
 
 const NO_GHOSTS: LayoutStageSnapshot['ghosts'] = []
+const NOTHING_MOVABLE: ReadonlySet<string> = new Set()
 
 export function LayoutStageView({ snapshot, fill }: LayoutStageViewProps) {
   const [viewChoice, setViewChoice] = useState<ViewChoice>('3d')
@@ -159,6 +160,8 @@ function StageFrame({ snapshot, className, viewChoice, onViewChoice, showDimensi
   const ghosts = editable ? snapshot.ghosts : NO_GHOSTS
   const sceneGhosts = useMemo(() => ghosts.map(({ key, footprint, outline }) => ({ key, footprint, outline })), [ghosts])
   const selectedEntryId = editable ? snapshot.selectedEntryId : null
+  // Full screen is for looking: nothing there is dragged about.
+  const movableEntryIds = editable ? snapshot.movableEntryIds : NOTHING_MOVABLE
   // "Bringing the units in…" always shows while models load. The summary follows
   // the set-up: where it is kept to Sizes, it goes with Sizes and stays off phones
   // (hide-mobile is core's utility, on the site's own phone breakpoint).
@@ -190,6 +193,9 @@ function StageFrame({ snapshot, className, viewChoice, onViewChoice, showDimensi
           onSelectUnit={snapshot.onSelectUnit}
           onPickGhost={snapshot.onPickGhost}
           onRemoveUnit={snapshot.onRemoveUnit}
+          movableEntryIds={movableEntryIds}
+          canMoveUnitTo={snapshot.canMoveUnitTo}
+          onMoveUnit={snapshot.onMoveUnit}
           onLoadingChange={setUnitsLoading}
         />
       </div>
@@ -205,6 +211,9 @@ function StageFrame({ snapshot, className, viewChoice, onViewChoice, showDimensi
           showDimensions={showDimensions}
           onSelect={editable ? (entryId) => snapshot.onSelectUnit(entryId === snapshot.selectedEntryId ? null : entryId) : undefined}
           onAdd={editable ? snapshot.onPickGhost : undefined}
+          movableEntryIds={movableEntryIds}
+          canMoveTo={snapshot.canMoveUnitTo}
+          onMove={editable ? snapshot.onMoveUnit : undefined}
         />
       </div>
       <div className="mcf-stage-tools">

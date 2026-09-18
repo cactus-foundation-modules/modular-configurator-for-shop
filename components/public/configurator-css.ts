@@ -123,6 +123,11 @@ export const CONFIGURATOR_CSS = `
 .mcf-plan-hit:hover .mcf-plan-unit{fill:var(--color-primary-subtle)}
 .mcf-plan-hit[aria-pressed="true"] .mcf-plan-unit{fill:var(--color-primary-subtle);stroke:var(--color-primary);stroke-width:3}
 .mcf-plan-hit:focus-visible .mcf-plan-unit,.mcf-plan-hit:focus-visible .mcf-plan-ghost{stroke:var(--color-border-focus,var(--color-primary));stroke-width:3}
+.mcf-plan-hit--movable{cursor:move;touch-action:none}
+.mcf-plan-hit--dragging{cursor:grabbing}
+.mcf-plan-hit--dragging .mcf-plan-unit{fill:var(--color-primary-subtle);stroke:var(--color-primary);stroke-width:3}
+.mcf-plan-hit--blocked,.mcf-plan-hit--blocked:hover{cursor:not-allowed}
+.mcf-plan-hit--blocked .mcf-plan-unit,.mcf-plan-hit--blocked:hover .mcf-plan-unit{fill:color-mix(in srgb,var(--color-danger) 14%,var(--color-surface));stroke:var(--color-danger);stroke-width:3}
 .mcf-plan-ghost{fill:var(--color-primary-subtle);fill-opacity:.55;stroke:var(--color-primary);stroke-width:1.5;stroke-dasharray:6 4;vector-effect:non-scaling-stroke}
 .mcf-plan-ghost-plus{fill:var(--color-primary);font-weight:700;text-anchor:middle;dominant-baseline:central}
 .mcf-plan-dimension{fill:var(--color-text-muted);text-anchor:middle;dominant-baseline:central;font-variant-numeric:tabular-nums}

@@ -19,7 +19,8 @@ import { formatMoney } from '@/modules/shop/lib/money'
 import { taxViewAmounts, type ProductTaxView } from '@/modules/shop/lib/tax-view-shared'
 import { useVariationSelection } from '@/modules/shop-variations/lib/use-variation-selection'
 import type { PackedVariationBootstrap } from '@/modules/shop-variations/lib/variation-bootstrap-pack'
-import { layoutPieceCount, placeLayout } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { layoutPieceCount, placeLayout, type FloorVector } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { fitsAt, snapFloorPoint } from '@/modules/modular-configurator-for-shop/lib/free-units'
 import { decodeLayout, LAYOUT_PARAM } from '@/modules/modular-configurator-for-shop/lib/layout-code'
 import { priceLayout } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { unitCountLabel } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
@@ -60,7 +61,10 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
     () => new Map(storefront.pieces.map((piece) => [piece.pieceId, piece.definition])),
     [storefront.pieces],
   )
-  const limits = useMemo(() => ({ maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits }), [storefront.maxPieces, storefront.frontUnits])
+  const limits = useMemo(
+    () => ({ maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits, freeUnits: storefront.freeUnits }),
+    [storefront.maxPieces, storefront.frontUnits, storefront.freeUnits],
+  )
   const builder = useLayoutBuilder(definitions, limits)
   const { dispatch } = builder
   // "Design your own" opens the builder with nothing in it. A preset or a link
@@ -107,7 +111,10 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       pieceSlugById: new Map(storefront.pieces.map((piece) => [piece.pieceId, piece.valueSlug])),
       otherOptions: otherOptionsOf(payload, storefront.pieceOptionId),
     })
-    if (decoded) dispatch({ type: 'start-from', units: decoded.units, byShopper: false })
+    if (!decoded) return
+    // Units standing on their own are written after the layout's own, each with where it stands.
+    const free = decoded.units.flatMap((unit) => (unit.free ? [{ pieceId: unit.pieceId, choices: unit.choices, spot: unit.free }] : []))
+    dispatch({ type: 'start-from', units: decoded.units.filter((unit) => !unit.free), free, byShopper: false })
   }, [payload, storefront.pieces, storefront.pieceOptionId, dispatch])
 
   // Keep the address bar in step with the shopper's edits (never before one).
@@ -168,9 +175,28 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
     setStatusText(`${layouts} in the basket - ${unitCountLabel(view.price.units.length * layoutQuantity)} across ${lines === 1 ? '1 line' : `${lines} lines`}.`)
   }
 
-  const started = designingOwn || builder.draft.chain.length > 0
+  const started = designingOwn || builder.draft.chain.length > 0 || builder.draft.free.length > 0
+  // No layout to join on to yet, though there may be units standing on their own.
   const isEmpty = builder.draft.chain.length === 0
+  const nothingPlaced = isEmpty && builder.draft.free.length === 0
   const ghosts = useMemo(() => (view ? joinableSpaces(view, isEmpty) : []), [view, isEmpty])
+  const movableEntryIds = useMemo(() => new Set(builder.draft.free.map((unit) => unit.entryId)), [builder.draft.free])
+  const allPlaced = builder.allPlaced
+  // Judged where the unit would really land (the builder keeps drops to the
+  // nearest centimetre), by the same test the builder's own move makes, so a
+  // spot the view is told fits is a spot the move is taken at.
+  const canMoveUnitTo = useCallback(
+    (entryId: string, centre: FloorVector) => fitsAt(allPlaced, entryId, snapFloorPoint(centre)),
+    [allPlaced],
+  )
+  const moveUnit = useCallback(
+    (entryId: string, centre: FloorVector) => {
+      if (!canMoveUnitTo(entryId, centre)) return false
+      dispatch({ type: 'move-free', entryId, centre })
+      return true
+    },
+    [canMoveUnitTo, dispatch],
+  )
 
   const selectUnit = useCallback(
     (entryId: string | null) => {
@@ -203,6 +229,12 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         setPickerSpace(key)
         return
       }
+      if (space.kind === 'free') {
+        // Left open, as at an end: two tables are usually added in a go.
+        dispatch({ type: 'add-free', pieceId })
+        setPickerSpace(key)
+        return
+      }
       if (space.kind === 'corner') {
         // The new unit starts a row round the corner, and that row's open end is
         // where the next one goes.
@@ -227,23 +259,26 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
       wanted: activeTab !== 'individual',
       parentProductId: storefront.parentProductId,
       look: storefront.viewer,
-      placed: builder.placed,
+      placed: allPlaced,
+      movableEntryIds,
       pieceById,
       childIdByEntry: view.childIdByEntry,
       ghosts,
       selectedEntryId: builder.selectedEntryId,
       widthText: view.widthText,
       depthText: view.depthText,
-      summaryText: isEmpty ? 'Tap the + to place your first unit' : `${view.shapeLabel} · ${view.unitCountText} · ${view.footprintText}`,
-      summaryWithSizesOnly: !isEmpty && storefront.viewSummary === 'with-sizes',
+      summaryText: nothingPlaced ? 'Tap the + to place your first unit' : `${view.shapeLabel} · ${view.unitCountText} · ${view.footprintText}`,
+      summaryWithSizesOnly: !nothingPlaced && storefront.viewSummary === 'with-sizes',
       arrangementText: view.arrangementText,
-      isEmpty,
+      isEmpty: nothingPlaced,
       labelFor,
       onSelectUnit: selectUnit,
       onPickGhost: openPicker,
       onRemoveUnit: removeUnit,
+      canMoveUnitTo,
+      onMoveUnit: moveUnit,
     }
-  }, [started, view, builder.editCount, builder.placed, builder.selectedEntryId, activeTab, storefront, pieceById, ghosts, isEmpty, labelFor, selectUnit, openPicker, removeUnit])
+  }, [started, view, builder.editCount, allPlaced, movableEntryIds, builder.selectedEntryId, activeTab, storefront, pieceById, ghosts, nothingPlaced, labelFor, selectUnit, openPicker, removeUnit, canMoveUnitTo, moveUnit])
 
   useEffect(() => {
     publishLayoutStage(storefront.slug, snapshot)
@@ -254,7 +289,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
   // button lives in the workspace, so without this a reset that lands on the
   // shapes would throw a twelve-unit layout away for good.
   const clearedLayout = builder.history[builder.history.length - 1]
-  const canReturnToLayout = isEmpty && (clearedLayout?.chain.length ?? 0) > 0
+  const canReturnToLayout = nothingPlaced && ((clearedLayout?.chain.length ?? 0) > 0 || (clearedLayout?.free.length ?? 0) > 0)
 
   if (!started || !payload || !view || !snapshot) {
     return (

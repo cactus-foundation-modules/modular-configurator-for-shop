@@ -11,6 +11,12 @@
 // and never decides anything about the layout itself: every pose it is handed
 // came from the placement maths, which is the one source of truth.
 //
+// The one thing it lets the shopper do directly is drag a unit standing on its
+// own across the floor. Even then it only proposes: while dragging it asks the
+// builder whether the unit would fit there (and outlines it in the danger colour
+// where it would not), and on letting go it hands the spot back. A spot the
+// builder does not take, the unit slides back from.
+//
 // Lighting, tone mapping, decoders and model loading are the 3D views module's,
 // so a unit in a layout looks exactly like the same unit in the gallery.
 import type {
@@ -57,6 +63,10 @@ export interface SceneCallbacks {
   onSelectUnit: (entryId: string | null) => void
   onPickGhost: (key: SpaceKey) => void
   onRemoveUnit: (entryId: string) => void
+  /** Whether a movable unit could stand with its middle at `centre` (millimetres). */
+  canMoveUnitTo: (entryId: string, centre: FloorVector) => boolean
+  /** A movable unit let go of with its middle at `centre` (millimetres); false when the builder did not take the move. */
+  onMoveUnit: (entryId: string, centre: FloorVector) => boolean
   onLoadingChange: (unitsLoading: number) => void
   onContextLost: () => void
 }
@@ -81,10 +91,26 @@ interface UnitSlot {
   built: BuiltUnitModel | null
   buildToken: number
   target: PiecePose
+  /** Where the layout says the unit is: `target` too, except while it is being dragged. */
+  rest: PiecePose
   footprint: FloorRectangle
   outline: readonly FloorVector[]
   /** 0 while arriving, 1 when settled. */
   arrival: number
+}
+
+/** A unit standing on its own, being dragged across the floor. */
+interface UnitDrag {
+  entryId: string
+  pointerId: number
+  /** From the floor under the pointer to the unit's middle, in millimetres, so it keeps hold where it was picked up. */
+  grab: FloorVector
+  startX: number
+  startY: number
+  /** False until the pointer has gone further than a tap. */
+  moved: boolean
+  centre: FloorVector
+  fits: boolean
 }
 
 interface CameraGoal {
@@ -127,6 +153,8 @@ export class LayoutScene {
   private readonly ghostGroup: Group
   private readonly selectionGroup: Group
   private readonly dimensionGroup: Group
+  /** The outline under a unit being dragged: where it would land, and whether it can. */
+  private readonly dragGroup: Group
   private readonly ground: Mesh<PlaneGeometry, ShadowMaterial>
   private bounds: FloorRectangle | null = null
   private selectedEntryId: string | null = null
@@ -151,6 +179,9 @@ export class LayoutScene {
   private readonly removeListeners: Array<() => void> = []
   /** False for a view that is only looked at: no remove badges, and taps choose nothing. */
   private editable = true
+  /** Units that can be dragged about: those standing on their own. */
+  private movable: ReadonlySet<string> = new Set()
+  private drag: UnitDrag | null = null
 
   private constructor(
     private readonly three: ThreeModule,
@@ -168,10 +199,11 @@ export class LayoutScene {
     this.selectionGroup = new three.Group()
     this.dimensionGroup = new three.Group()
     this.dimensionGroup.visible = false
+    this.dragGroup = new three.Group()
     this.ground = new three.Mesh(new three.PlaneGeometry(1, 1), new three.ShadowMaterial({ opacity: 0.3 }))
     this.ground.rotation.x = -Math.PI / 2
     this.ground.receiveShadow = true
-    scene.add(this.ground, this.ghostGroup, this.selectionGroup, this.dimensionGroup)
+    scene.add(this.ground, this.ghostGroup, this.selectionGroup, this.dimensionGroup, this.dragGroup)
   }
 
   static async create(
@@ -235,7 +267,10 @@ export class LayoutScene {
     for (const unit of units) {
       const existing = this.units.get(unit.entryId)
       const slot = existing ?? this.addUnit(unit)
-      slot.target = unit.pose
+      slot.rest = unit.pose
+      // A unit in the shopper's hand stays there; where the layout says it is
+      // is only where it goes back to if it is let go of somewhere it cannot stand.
+      if (this.drag?.entryId !== unit.entryId) slot.target = unit.pose
       slot.footprint = unit.footprint
       slot.outline = unit.outline
       if (slot.sourceKey !== unit.sourceKey) this.loadUnit(slot, unit)
@@ -278,8 +313,16 @@ export class LayoutScene {
 
   setEditable(editable: boolean): void {
     this.editable = editable
-    if (!editable) this.hoveredEntryId = null
+    if (!editable) {
+      this.hoveredEntryId = null
+      this.cancelDrag()
+    }
     this.refreshRemoveBadge()
+  }
+
+  setMovable(entryIds: ReadonlySet<string>): void {
+    this.movable = entryIds
+    if (this.drag && !entryIds.has(this.drag.entryId)) this.cancelDrag()
   }
 
   resize(width: number, height: number): void {
@@ -301,6 +344,7 @@ export class LayoutScene {
     this.clearGroup(this.ghostGroup)
     this.clearGroup(this.selectionGroup)
     this.clearGroup(this.dimensionGroup)
+    this.clearGroup(this.dragGroup)
     this.removeBadge?.material.map?.dispose()
     this.removeBadge?.material.dispose()
     this.ground.geometry.dispose()
@@ -322,6 +366,7 @@ export class LayoutScene {
       built: null,
       buildToken: 0,
       target: unit.pose,
+      rest: unit.pose,
       footprint: unit.footprint,
       outline: unit.outline,
       arrival: this.theme.reducedMotion ? 1 : 0,
@@ -332,6 +377,7 @@ export class LayoutScene {
   }
 
   private removeUnit(entryId: string, slot: UnitSlot): void {
+    if (this.drag?.entryId === entryId) this.cancelDrag()
     if (this.hoveredEntryId === entryId) this.hoveredEntryId = null
     if (this.badgeEntryId === entryId && this.removeBadge) slot.holder.remove(this.removeBadge)
     if (this.badgeEntryId === entryId) this.badgeEntryId = null
@@ -819,13 +865,22 @@ export class LayoutScene {
     const onPointerDown = (event: PointerEvent) => {
       this.pointerDown = { x: event.clientX, y: event.clientY }
     }
+    // In the capture phase, so it runs before the orbit controls' own listener
+    // and can switch them off: a finger on a movable unit moves the unit, not the camera.
+    const onPointerDownFirst = (event: PointerEvent) => this.startDrag(event)
     const onPointerUp = (event: PointerEvent) => {
       const start = this.pointerDown
       this.pointerDown = null
-      if (!this.editable || !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return
+      const dragged = this.endDrag(event)
+      if (dragged || !this.editable || !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return
       this.pick(event)
     }
+    const onPointerCancel = () => {
+      this.pointerDown = null
+      this.cancelDrag()
+    }
     const onPointerMove = (event: PointerEvent) => {
+      if (this.moveDrag(event)) return
       if (this.pointerDown || !this.editable) return
       const hit = this.hitAt(event)
       if (hit && 'removeEntryId' in hit) {
@@ -834,7 +889,7 @@ export class LayoutScene {
       }
       if (hit && 'entryId' in hit) {
         this.setHoveredEntry(hit.entryId)
-        this.canvas.style.cursor = 'pointer'
+        this.canvas.style.cursor = this.movable.has(hit.entryId) ? 'move' : 'pointer'
         return
       }
       this.setHoveredEntry(null)
@@ -844,16 +899,131 @@ export class LayoutScene {
       event.preventDefault()
       this.callbacks.onContextLost()
     }
+    this.canvas.addEventListener('pointerdown', onPointerDownFirst, { capture: true })
     this.canvas.addEventListener('pointerdown', onPointerDown)
     this.canvas.addEventListener('pointerup', onPointerUp)
+    this.canvas.addEventListener('pointercancel', onPointerCancel)
     this.canvas.addEventListener('pointermove', onPointerMove)
     this.canvas.addEventListener('webglcontextlost', onContextLost)
     this.removeListeners.push(() => {
+      this.canvas.removeEventListener('pointerdown', onPointerDownFirst, { capture: true })
       this.canvas.removeEventListener('pointerdown', onPointerDown)
       this.canvas.removeEventListener('pointerup', onPointerUp)
+      this.canvas.removeEventListener('pointercancel', onPointerCancel)
       this.canvas.removeEventListener('pointermove', onPointerMove)
       this.canvas.removeEventListener('webglcontextlost', onContextLost)
     })
+  }
+
+  // ---- Dragging a unit that stands on its own -------------------------------
+
+  /** The point on the floor under the pointer, in millimetres; null looking over the horizon. */
+  private floorPointAt(event: PointerEvent): FloorVector | null {
+    const { three } = this
+    const rect = this.canvas.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return null
+    const pointer = new three.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    const raycaster = new three.Raycaster()
+    raycaster.setFromCamera(pointer, this.camera)
+    const hit = raycaster.ray.intersectPlane(new three.Plane(new three.Vector3(0, 1, 0), 0), new three.Vector3())
+    return hit ? { x: hit.x * MILLIMETRES_PER_METRE, z: hit.z * MILLIMETRES_PER_METRE } : null
+  }
+
+  /** Picks up a movable unit under the pointer, if there is one. */
+  private startDrag(event: PointerEvent): void {
+    if (!this.editable || this.drag || !event.isPrimary || event.button !== 0) return
+    const hit = this.hitAt(event)
+    if (!hit || !('entryId' in hit) || !this.movable.has(hit.entryId)) return
+    const slot = this.units.get(hit.entryId)
+    const floor = this.floorPointAt(event)
+    if (!slot || !floor) return
+    this.controls.enabled = false
+    try {
+      this.canvas.setPointerCapture(event.pointerId)
+    } catch {
+      // A pointer that cannot be captured still drags while it stays over the view.
+    }
+    this.drag = {
+      entryId: hit.entryId,
+      pointerId: event.pointerId,
+      grab: { x: slot.rest.centre.x - floor.x, z: slot.rest.centre.z - floor.z },
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      centre: slot.rest.centre,
+      fits: true,
+    }
+  }
+
+  /** Follows the pointer with the unit being dragged; false when nothing is. */
+  private moveDrag(event: PointerEvent): boolean {
+    const drag = this.drag
+    if (!drag || event.pointerId !== drag.pointerId) return false
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <= CLICK_SLOP_PX) return true
+    const floor = this.floorPointAt(event)
+    const slot = this.units.get(drag.entryId)
+    if (!floor || !slot) return true
+    drag.moved = true
+    drag.centre = { x: Math.round(floor.x + drag.grab.x), z: Math.round(floor.z + drag.grab.z) }
+    drag.fits = this.callbacks.canMoveUnitTo(drag.entryId, drag.centre)
+    slot.target = { centre: drag.centre, rotationY: slot.rest.rotationY }
+    // Under the finger, not easing after it.
+    slot.holder.position.x = toMetres(drag.centre.x)
+    slot.holder.position.z = toMetres(drag.centre.z)
+    this.canvas.style.cursor = drag.fits ? 'grabbing' : 'not-allowed'
+    this.drawDragOutline(slot, drag)
+    return true
+  }
+
+  /** Lets go of the unit being dragged; true when it had been moved (so the release is not also a tap). */
+  private endDrag(event: PointerEvent): boolean {
+    const drag = this.drag
+    if (!drag || event.pointerId !== drag.pointerId) return false
+    const slot = this.units.get(drag.entryId)
+    this.finishDrag()
+    if (!drag.moved) return false
+    const taken = drag.fits && this.callbacks.onMoveUnit(drag.entryId, drag.centre)
+    if (!taken && slot) slot.target = slot.rest
+    return true
+  }
+
+  /** Drops a drag without moving anything: the unit goes back where it was. */
+  private cancelDrag(): void {
+    const drag = this.drag
+    if (!drag) return
+    const slot = this.units.get(drag.entryId)
+    if (slot) slot.target = slot.rest
+    this.finishDrag()
+  }
+
+  private finishDrag(): void {
+    const drag = this.drag
+    this.drag = null
+    this.controls.enabled = true
+    if (drag) {
+      try {
+        if (this.canvas.hasPointerCapture(drag.pointerId)) this.canvas.releasePointerCapture(drag.pointerId)
+      } catch {
+        // Already released with the pointer.
+      }
+    }
+    this.clearGroup(this.dragGroup)
+    this.selectionGroup.visible = true
+    this.canvas.style.cursor = ''
+    this.needsRender = true
+  }
+
+  /** The unit's outline where it would land: the accent colour where it fits, the danger colour where it does not. */
+  private drawDragOutline(slot: UnitSlot, drag: UnitDrag): void {
+    this.clearGroup(this.dragGroup)
+    const shiftX = drag.centre.x - slot.rest.centre.x
+    const shiftZ = drag.centre.z - slot.rest.centre.z
+    const outline = slot.outline.map((corner) => ({ x: corner.x + shiftX, z: corner.z + shiftZ }))
+    const colour = drag.fits ? this.theme.accent : this.theme.danger
+    this.dragGroup.add(this.floorFill(outline, colour, 0.22, 0.003), this.floorOutline(outline, colour, false, 0.005))
+    // The chosen unit's highlight stays behind where it was; this one goes with it.
+    this.selectionGroup.visible = false
+    this.needsRender = true
   }
 
   private hitAt(

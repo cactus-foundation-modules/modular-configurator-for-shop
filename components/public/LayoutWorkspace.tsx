@@ -16,7 +16,8 @@ import { formatMoney } from '@/modules/shop/lib/money'
 import { TaxViewMoney, TaxViewNote } from '@/modules/shop/components/public/TaxViewText'
 import { TaxViewToggle } from '@/modules/shop/components/public/TaxViewToggle'
 import type { ProductTaxView } from '@/modules/shop/lib/tax-view-shared'
-import { frontSpurOptions, hostEntryIdForSpur, swapOptions, turnIsOffered, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { FREE_SPACE_KEY, frontSpurOptions, hostEntryIdForSpur, swapOptions, turnIsOffered, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import { canStandFree, chainLimitsBeside, freeUnitEntry } from '@/modules/modular-configurator-for-shop/lib/free-units'
 import { isReversible } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { layoutValueReachesAUnit, priceLayout, unitIsMadeIn } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { refusalSentence, unitProblemSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
@@ -124,11 +125,17 @@ export function LayoutWorkspace({
     priceLayout(payload, storefront.pieceOptionId, [{ entryId: 'probe', pieceId }], layoutChoices, {}).units[0]?.variant?.price ?? null
 
   const layoutValueProblem = (optionId: string, valueId: string): string | null =>
-    layoutValueReachesAUnit(payload, storefront.pieceOptionId, draft.chain, draft.unitChoices, optionId, valueId)
+    layoutValueReachesAUnit(payload, storefront.pieceOptionId, [...draft.chain, ...draft.free.map(freeUnitEntry)], draft.unitChoices, optionId, valueId)
       ? null
       : 'not made for any unit in this layout'
 
-  const isEmpty = draft.chain.length === 0
+  // No layout to join on to yet; and nothing at all, not even a unit on its own.
+  const chainEmpty = draft.chain.length === 0
+  const isEmpty = chainEmpty && draft.free.length === 0
+  // What a chain edit may use: the layout's limits less the room the free units take.
+  const chainLimits = chainLimitsBeside(draft.free, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits, freeUnits: storefront.freeUnits })
+  const freeSpace = spaceViewFor(view, FREE_SPACE_KEY)
+  const freeEntryIds = new Set(draft.free.map((unit) => unit.entryId))
 
   // One layout's variations and how many of each - what the basket is asked
   // about for delivery. Only once every unit is a real variation.
@@ -154,11 +161,19 @@ export function LayoutWorkspace({
   const selectedOwn = (selectedUnit && draft.unitChoices[selectedUnit.entry.entryId]) ?? {}
   const selectedDefinition = selectedUnit ? definitions.get(selectedUnit.entry.pieceId) : undefined
   const selectedIsFrontSpur = selectedUnit ? hostEntryIdForSpur(draft.chain, selectedUnit.entry.entryId) !== null : false
+  const selectedStandsFree = selectedUnit ? freeEntryIds.has(selectedUnit.entry.entryId) : false
   const selectedLabel = selectedUnit ? (view.labels[selectedIndex] ?? labelFor(selectedUnit.entry.pieceId)) : ''
   const frontSpurChoices =
-    selectedUnit && selectedDefinition && !selectedIsFrontSpur
-      ? frontSpurOptions(draft.chain, selectedUnit.entry.entryId, [...definitions.values()], { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })
+    selectedUnit && selectedDefinition && !selectedIsFrontSpur && !selectedStandsFree
+      ? frontSpurOptions(draft.chain, selectedUnit.entry.entryId, [...definitions.values()], chainLimits)
       : []
+  // A unit on its own can become any other that stands on its own; one in the
+  // layout, anything that still fits there.
+  const swapChoices = !selectedUnit
+    ? []
+    : selectedStandsFree
+      ? [...definitions.values()].filter((definition) => canStandFree(definition) && definition.pieceId !== selectedUnit.entry.pieceId)
+      : swapOptions(draft.chain, selectedUnit.entry.entryId, definitions, chainLimits)
   const resetButton = (
     <button type="button" className="mcf-reset" onClick={onReset}>
       Reset options
@@ -194,7 +209,7 @@ export function LayoutWorkspace({
         {pickerView && openSpace ? (
           <div ref={pickerRef}>
             <PiecePicker
-              heading={isEmpty ? 'Choose your first unit' : `Add a unit ${pickerView.besideText}`}
+              heading={chainEmpty && openSpace !== FREE_SPACE_KEY ? 'Choose your first unit' : `Add a unit ${pickerView.besideText}`}
               candidates={pickerView.candidates}
               labelFor={labelFor}
               priceFor={priceOfPieceAlone}
@@ -223,7 +238,7 @@ export function LayoutWorkspace({
               ) : null}
             </div>
           </div>
-          {snapshot.ghosts.length > 0 && !isEmpty ? (
+          {(snapshot.ghosts.length > 0 || freeSpace) && !isEmpty ? (
             <div className="mcf-row">
               {snapshot.ghosts.map((ghost) => (
                 <button
@@ -236,6 +251,16 @@ export function LayoutWorkspace({
                   + {ghost.label}
                 </button>
               ))}
+              {freeSpace ? (
+                <button
+                  type="button"
+                  className="mcf-chip"
+                  aria-pressed={pickerSpace === FREE_SPACE_KEY}
+                  onClick={() => onOpenPicker(FREE_SPACE_KEY)}
+                >
+                  + Add a unit on its own
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -271,6 +296,8 @@ export function LayoutWorkspace({
                         <span className="mcf-unit-detail mcf-unit-detail--problem">{unitProblemSentence(unit.problem)}</span>
                       ) : ownLabels.length > 0 ? (
                         <span className="mcf-unit-detail">In {ownLabels.join(', ')}</span>
+                      ) : freeEntryIds.has(unit.entry.entryId) ? (
+                        <span className="mcf-unit-detail">On its own</span>
                       ) : null}
                     </span>
                     {unit.variant ? <span className="mcf-unit-price">{figure(unit.variant.price)}</span> : null}
@@ -291,18 +318,25 @@ export function LayoutWorkspace({
             </p>
             <UnitEditor
               label={selectedLabel}
-              swapTo={swapOptions(draft.chain, selectedUnit.entry.entryId, definitions, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })}
+              swapTo={swapChoices}
               labelFor={labelFor}
               otherOptions={otherOptions}
               layoutChoices={layoutChoices}
               ownChoices={selectedOwn}
               madeIn={selectedUnit.selection}
               adjustedOptionIds={selectedUnit.adjustedOptionIds}
-              onFlip={selectedDefinition && isReversible(selectedDefinition) && !selectedIsFrontSpur ? () => dispatch({ type: 'flip', entryId: selectedUnit.entry.entryId }) : undefined}
-              onTurn={
-                !selectedIsFrontSpur && turnIsOffered(draft.chain, selectedUnit.entry.entryId, definitions, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })
-                  ? () => dispatch({ type: 'turn', entryId: selectedUnit.entry.entryId })
+              onFlip={
+                selectedDefinition && isReversible(selectedDefinition) && !selectedIsFrontSpur && !selectedStandsFree
+                  ? () => dispatch({ type: 'flip', entryId: selectedUnit.entry.entryId })
                   : undefined
+              }
+              standsFree={selectedStandsFree}
+              onTurn={
+                selectedStandsFree
+                  ? () => dispatch({ type: 'turn-free', entryId: selectedUnit.entry.entryId })
+                  : !selectedIsFrontSpur && turnIsOffered(draft.chain, selectedUnit.entry.entryId, definitions, chainLimits)
+                    ? () => dispatch({ type: 'turn', entryId: selectedUnit.entry.entryId })
+                    : undefined
               }
               turned={selectedUnit.entry.turned === true}
               frontSpurTo={frontSpurChoices}

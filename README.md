@@ -50,6 +50,9 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
      the seat front of a backed one - having both kinds of straight unit makes it possible,
      but only this setting offers it, so a range whose backless unit is a stool to stand
      beside the seats rather than a cube to stand in front of them leaves it off;
+   - tick "Units on their own" (off by default) to let shoppers put a table, stool or armchair
+     (a straight unit with no back, or with arms both sides) anywhere on the floor round the
+     layout, as many as the layout limit allows, and drag them about (`lib/free-units.ts`);
    - optionally write ready-made layouts, with a backless unit stood in front of any straight
      unit with a back where that setting allows it, and a backless unit beside a corner
      turned to line up with the row.
@@ -147,7 +150,12 @@ the nearest combination it is made in, and its row says what it is in
 - **Both tabs share one set of choices**: a fabric picked in either is picked in the other.
 - **A link that reopens the layout**: `?modular-layout=left-unit.central-unit~upholstery-colour:rivet-olive.corner-unit`.
   A backless curve laid the other way round carries `~flip`, and a backless unit turned a
-  quarter carries `~turn`.
+  quarter carries `~turn`. A unit standing on its own follows the layout's units with
+  `~free:x_z_turn` - millimetres and hundredths of a degree from the layout's first unit.
+- **Units on their own** (where the set-up allows): tables, stools and armchairs put anywhere
+  on the floor, dragged in the 3D view or the plan (arrow keys there too), turned an eighth at
+  a time from their panel. Nothing may sit on anything else; the layout growing into one moves
+  it out of the way. They count towards the layout limit and price, share and buy like any unit.
 - **One grouped set of basket lines** - one line per distinct variation, repeats folded
   into a quantity, the first unit heading the group with the layout's shape and
   arrangement written on it for whoever packs the order.

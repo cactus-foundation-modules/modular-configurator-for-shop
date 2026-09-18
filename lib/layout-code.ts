@@ -10,7 +10,12 @@
 // uses for its own parameters. A unit laid the other way round (a curve with no
 // back) carries a bare "~flip", and a backless unit turned a quarter a bare "~turn",
 // and a table laid as a corner "~corner-left" or "~corner-right" (the side a
-// corner's second back would be on), all of which a link reader that predates them ignores. Slugs, not ids, for the same reason the stored
+// corner's second back would be on), all of which a link reader that predates them ignores.
+// A unit standing on its own, away from the layout, carries "~free:x_z_turn" -
+// where it stands and which way it faces, in whole millimetres and hundredths of a
+// degree (whole numbers, so never a "." to split on), in the frame
+// of the layout's first unit (see lib/free-units.ts) - and follows the layout's
+// own units. Slugs, not ids, for the same reason the stored
 // set-up uses them: an id means nothing to the next catalogue import.
 //
 // The parameter has a name of its own rather than reusing shop-variations' one
@@ -18,6 +23,7 @@
 import { optionParamKey } from '@/modules/shop-variations/lib/url-selection'
 import type { OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
 import type { SvrOptionWithValues } from '@/modules/shop-variations/lib/types'
+import type { FreeUnitSpot } from '@/modules/modular-configurator-for-shop/lib/free-units'
 
 export const LAYOUT_PARAM = 'modular-layout'
 
@@ -28,6 +34,8 @@ const FLIP_MARK = 'flip'
 const TURN_MARK = 'turn'
 const CORNER_MARKS = { left: 'corner-left', right: 'corner-right' } as const
 const FRONT_MARK = 'front'
+const FREE_MARK = 'free'
+const FREE_SEPARATOR = '_'
 
 /** A backless unit on the front edge of the host in this segment. */
 export interface LayoutCodeFrontSpur {
@@ -45,6 +53,8 @@ export interface LayoutCodeUnit {
   /** A table laid as a corner, with a corner's second back on this side. */
   cornered?: 'left' | 'right'
   front?: LayoutCodeFrontSpur
+  /** A unit standing on its own, away from the layout, and where. */
+  free?: FreeUnitSpot
 }
 
 /** A layout as the code carries it: its units in order. */
@@ -71,6 +81,7 @@ export function encodeLayout(units: readonly LayoutCodeUnit[], vocabulary: Layou
         ...(unit.turned ? [TURN_MARK] : []),
         ...(unit.cornered ? [CORNER_MARKS[unit.cornered]] : []),
         ...(frontSlug ? [`${FRONT_MARK}${PAIR_SEPARATOR}${frontSlug}`] : []),
+        ...(unit.free ? [`${FREE_MARK}${PAIR_SEPARATOR}${[Math.round(unit.free.x), Math.round(unit.free.z), Math.round(unit.free.turnDegrees * 100)].join(FREE_SEPARATOR)}`] : []),
         ...encodeChoices(unit.choices, vocabulary.otherOptions),
         ...(unit.front ? encodeChoices(unit.front.choices, vocabulary.otherOptions, `${FRONT_MARK}-`) : []),
       ]
@@ -115,8 +126,17 @@ export function decodeLayout(code: string, vocabulary: LayoutCodeVocabulary): De
     const frontPart = rest.find((part) => part.startsWith(`${FRONT_MARK}${PAIR_SEPARATOR}`))
     const frontSlug = frontPart?.slice(FRONT_MARK.length + 1)
     const frontPieceId = frontSlug ? pieceIdBySlug.get(frontSlug) : undefined
+    const freePart = rest.find((part) => part.startsWith(`${FREE_MARK}${PAIR_SEPARATOR}`))
+    const free = freePart ? decodeFreeSpot(freePart.slice(FREE_MARK.length + 1)) : null
     const hostPairs = rest.filter(
-      (part) => part !== FLIP_MARK && part !== TURN_MARK && part !== CORNER_MARKS.left && part !== CORNER_MARKS.right && part !== frontPart && !part.startsWith(`${FRONT_MARK}-`),
+      (part) =>
+        part !== FLIP_MARK &&
+        part !== TURN_MARK &&
+        part !== CORNER_MARKS.left &&
+        part !== CORNER_MARKS.right &&
+        part !== frontPart &&
+        part !== freePart &&
+        !part.startsWith(`${FRONT_MARK}-`),
     )
     const spurPairs = rest.filter((part) => part.startsWith(`${FRONT_MARK}-`)).map((part) => part.slice(FRONT_MARK.length + 1))
     units.push({
@@ -126,9 +146,19 @@ export function decodeLayout(code: string, vocabulary: LayoutCodeVocabulary): De
       ...(turned ? { turned: true } : {}),
       ...(cornered ? { cornered } : {}),
       front: frontPieceId ? { pieceId: frontPieceId, choices: decodeChoices(spurPairs, optionByKey) } : undefined,
+      ...(free ? { free } : {}),
     })
   }
   return units.length > 0 ? { units } : null
+}
+
+/** "x_z_turn"; null when any of the three is not a finite number, which drops the mark, not the unit. */
+function decodeFreeSpot(value: string): FreeUnitSpot | null {
+  const numbers = value.split(FREE_SEPARATOR).map(Number)
+  const [x, z, turnDegrees] = numbers
+  if (numbers.length !== 3 || x === undefined || z === undefined || turnDegrees === undefined) return null
+  if (![x, z, turnDegrees].every(Number.isFinite)) return null
+  return { x, z, turnDegrees: turnDegrees / 100 }
 }
 
 function decodeChoices(pairs: string[], optionByKey: ReadonlyMap<string, SvrOptionWithValues>): OptionSelection {

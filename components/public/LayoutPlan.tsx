@@ -8,7 +8,12 @@
 //
 // Drawn in millimetres, straight from the placement maths: the SVG's y axis runs
 // towards the shopper exactly as the layout's z does, so nothing is flipped.
-import type { KeyboardEvent, ReactElement } from 'react'
+//
+// A unit standing on its own can be dragged about, or nudged with the arrow keys
+// once it has focus (Shift for a finer step). While it is dragged it is drawn
+// where it would land, in the danger colour where it cannot; the drawing's frame
+// holds still until it is let go of.
+import { useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
 import {
   curveCentre,
   curveLayOf,
@@ -50,12 +55,50 @@ interface LayoutPlanProps {
   emptyText?: string
   onSelect?: (entryId: string) => void
   onAdd?: (key: SpaceKey) => void
+  /** Units that can be dragged about (those standing on their own). */
+  movableEntryIds?: ReadonlySet<string>
+  /** Whether a movable unit could stand with its middle at `centre`. */
+  canMoveTo?: (entryId: string, centre: FloorVector) => boolean
+  /** A movable unit put down with its middle at `centre`. */
+  onMove?: (entryId: string, centre: FloorVector) => unknown
+}
+
+interface PlanDrag {
+  entryId: string
+  pointerId: number
+  /** From the floor under the pointer to the unit's middle, so it keeps hold where it was picked up. */
+  grab: FloorVector
+  startX: number
+  startY: number
+  moved: boolean
+  centre: FloorVector
+  fits: boolean
 }
 
 /** Thickness of a drawn backrest and arm, as a share of the unit. */
 const BACK_SHARE = 0.2
 const ARM_SHARE = 0.12
 const EMPTY_VIEW = { minX: -600, maxX: 600, minZ: -400, maxZ: 400 }
+/** How far a pointer goes before a press on a movable unit is a drag, not a tap. */
+const DRAG_SLOP_PX = 5
+/** An arrow key's nudge, in millimetres, and with Shift held. */
+const NUDGE_MM = 100
+const FINE_NUDGE_MM = 10
+const NUDGES: Readonly<Record<string, FloorVector>> = {
+  ArrowLeft: { x: -1, z: 0 },
+  ArrowRight: { x: 1, z: 0 },
+  ArrowUp: { x: 0, z: -1 },
+  ArrowDown: { x: 0, z: 1 },
+}
+const NOTHING_MOVABLE: ReadonlySet<string> = new Set()
+
+/** The floor point under a pointer, in the drawing's own millimetres. */
+function floorPointOf(svg: SVGSVGElement | null, clientX: number, clientY: number): FloorVector | null {
+  const matrix = svg?.getScreenCTM()
+  if (!matrix) return null
+  const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse())
+  return { x: point.x, z: point.y }
+}
 
 function activateOnKey(event: KeyboardEvent, action: () => void): void {
   if (event.key !== 'Enter' && event.key !== ' ') return
@@ -85,7 +128,15 @@ export function LayoutPlan({
   emptyText,
   onSelect,
   onAdd,
+  movableEntryIds = NOTHING_MOVABLE,
+  canMoveTo,
+  onMove,
 }: LayoutPlanProps) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [drag, setDrag] = useState<PlanDrag | null>(null)
+  // A drag ends in a click on whatever it was let go over; that click is not a tap.
+  const swallowClickRef = useRef(false)
+  const canDrag = interactive && onMove !== undefined
   const bounds = layoutBounds(placed)
   const drawn = unionOf([...(bounds ? [bounds] : []), ...ghosts.map((ghost) => ghost.footprint)]) ?? EMPTY_VIEW
   const extent = Math.max(drawn.maxX - drawn.minX, drawn.maxZ - drawn.minZ, 1200)
@@ -99,8 +150,71 @@ export function LayoutPlan({
     drawn.maxZ - drawn.minZ + margin * 2 + dimensionGap * 1.6,
   ].join(' ')
 
+  const startDrag = (piece: PlacedPiece, event: ReactPointerEvent<SVGGElement>) => {
+    if (!canDrag || !event.isPrimary || event.button !== 0) return
+    const floor = floorPointOf(svgRef.current, event.clientX, event.clientY)
+    if (!floor) return
+    swallowClickRef.current = false
+    try {
+      svgRef.current?.setPointerCapture(event.pointerId)
+    } catch {
+      // Uncaptured, the drag still follows while the pointer stays over the plan.
+    }
+    setDrag({
+      entryId: piece.entry.entryId,
+      pointerId: event.pointerId,
+      grab: { x: piece.pose.centre.x - floor.x, z: piece.pose.centre.z - floor.z },
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      centre: piece.pose.centre,
+      fits: true,
+    })
+  }
+  const followDrag = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (!drag || event.pointerId !== drag.pointerId) return
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <= DRAG_SLOP_PX) return
+    const floor = floorPointOf(svgRef.current, event.clientX, event.clientY)
+    if (!floor) return
+    const centre = { x: Math.round(floor.x + drag.grab.x), z: Math.round(floor.z + drag.grab.z) }
+    setDrag({ ...drag, moved: true, centre, fits: canMoveTo ? canMoveTo(drag.entryId, centre) : true })
+  }
+  const endDrag = (event: ReactPointerEvent<SVGSVGElement>, dropped: boolean) => {
+    if (!drag || event.pointerId !== drag.pointerId) return
+    setDrag(null)
+    if (!drag.moved) return
+    // The click that follows the release comes in the same turn, if it comes to
+    // a unit at all; after that there is nothing left to swallow.
+    swallowClickRef.current = true
+    window.setTimeout(() => {
+      swallowClickRef.current = false
+    }, 0)
+    if (dropped && drag.fits) onMove?.(drag.entryId, drag.centre)
+  }
+  const select = onSelect
+    ? (entryId: string) => {
+        if (swallowClickRef.current) {
+          swallowClickRef.current = false
+          return
+        }
+        onSelect(entryId)
+      }
+    : undefined
+  const nudge = (piece: PlacedPiece, event: KeyboardEvent) => {
+    const direction = NUDGES[event.key]
+    if (!direction || !onMove) return
+    event.preventDefault()
+    const step = event.shiftKey ? FINE_NUDGE_MM : NUDGE_MM
+    const centre = { x: piece.pose.centre.x + direction.x * step, z: piece.pose.centre.z + direction.z * step }
+    if (!canMoveTo || canMoveTo(piece.entry.entryId, centre)) onMove(piece.entry.entryId, centre)
+  }
+
   return (
     <svg
+      ref={svgRef}
+      onPointerMove={drag ? followDrag : undefined}
+      onPointerUp={drag ? (event) => endDrag(event, true) : undefined}
+      onPointerCancel={drag ? (event) => endDrag(event, false) : undefined}
       className={className}
       viewBox={viewBox}
       preserveAspectRatio="xMidYMid meet"
@@ -109,18 +223,23 @@ export function LayoutPlan({
       aria-hidden={description ? undefined : true}
       focusable="false"
     >
-      {placed.map((piece, index) => (
-        <PlanUnit
-          key={piece.entry.entryId}
-          piece={piece}
-          number={index + 1}
-          label={labelFor(piece.entry.pieceId)}
-          fontSize={fontSize}
-          interactive={interactive}
-          selected={piece.entry.entryId === selectedEntryId}
-          onSelect={onSelect}
-        />
-      ))}
+      {placed.map((piece, index) => {
+        const movable = canDrag && movableEntryIds.has(piece.entry.entryId)
+        const dragged = drag?.moved === true && drag.entryId === piece.entry.entryId ? drag : null
+        return (
+          <PlanUnit
+            key={piece.entry.entryId}
+            piece={dragged ? { ...piece, pose: { ...piece.pose, centre: dragged.centre } } : piece}
+            number={index + 1}
+            label={labelFor(piece.entry.pieceId)}
+            fontSize={fontSize}
+            interactive={interactive}
+            selected={piece.entry.entryId === selectedEntryId}
+            onSelect={select}
+            drag={movable ? { dragging: dragged !== null, blocked: dragged?.fits === false, onStart: (event) => startDrag(piece, event), onKey: (event) => nudge(piece, event) } : undefined}
+          />
+        )
+      })}
       {ghosts.map((ghost) => (
         <PlanGhostSpace key={ghost.key} ghost={ghost} fontSize={fontSize * 1.6} onAdd={onAdd} />
       ))}
@@ -142,6 +261,14 @@ interface PlanUnitProps {
   interactive: boolean
   selected: boolean
   onSelect?: (entryId: string) => void
+  /** Present for a unit that can be dragged about. */
+  drag?: {
+    dragging: boolean
+    /** Being dragged over somewhere it cannot stand. */
+    blocked: boolean
+    onStart: (event: ReactPointerEvent<SVGGElement>) => void
+    onKey: (event: KeyboardEvent) => void
+  }
 }
 
 /**
@@ -296,7 +423,7 @@ function planShapeOf(piece: PlacedPiece): { body: ReactElement; numberAt: FloorV
   }
 }
 
-function PlanUnit({ piece, number, label, fontSize, interactive, selected, onSelect }: PlanUnitProps) {
+function PlanUnit({ piece, number, label, fontSize, interactive, selected, onSelect, drag }: PlanUnitProps) {
   const degrees = (-piece.pose.rotationY * 180) / Math.PI
   const { body: outline, numberAt } = planShapeOf(piece)
   // The number sits on the seat, in front of any backrest, and stays upright.
@@ -313,15 +440,25 @@ function PlanUnit({ piece, number, label, fontSize, interactive, selected, onSel
   )
 
   if (!interactive || !onSelect) return <g>{body}</g>
+  const className = [
+    'mcf-plan-hit',
+    ...(drag ? ['mcf-plan-hit--movable'] : []),
+    ...(drag?.dragging ? ['mcf-plan-hit--dragging'] : []),
+    ...(drag?.blocked ? ['mcf-plan-hit--blocked'] : []),
+  ].join(' ')
   return (
     <g
-      className="mcf-plan-hit"
+      className={className}
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={`Unit ${number}, ${label}`}
+      aria-label={drag ? `Unit ${number}, ${label}, standing on its own: arrow keys move it` : `Unit ${number}, ${label}`}
       onClick={select}
-      onKeyDown={(event) => activateOnKey(event, select)}
+      onPointerDown={drag?.onStart}
+      onKeyDown={(event) => {
+        drag?.onKey(event)
+        if (!event.defaultPrevented) activateOnKey(event, select)
+      }}
     >
       {body}
     </g>

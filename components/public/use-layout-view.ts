@@ -11,6 +11,7 @@ import {
   cornerSpaceKey,
   candidatesInFront,
   endPlan,
+  FREE_SPACE_KEY,
   frontSpaceKey,
   type EndCandidate,
   type SpaceKey,
@@ -24,6 +25,7 @@ import {
   type PlacedPiece,
 } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { encodeLayout } from '@/modules/modular-configurator-for-shop/lib/layout-code'
+import { canStandFree, chainLimitsBeside, freeUnitEntry, freeUnitSpot, placeFreeUnits } from '@/modules/modular-configurator-for-shop/lib/free-units'
 import {
   describeArrangement,
   describeFootprint,
@@ -42,7 +44,7 @@ import type { LayoutDraft } from '@/modules/modular-configurator-for-shop/compon
 import type { OptionSelection } from '@/modules/shop-variations/lib/selection-logic'
 import type { SvrOptionWithValues, VariantSelectorPayload } from '@/modules/shop-variations/lib/types'
 
-/** One space a unit could go in: an open end, or in front of a backed unit. */
+/** One space a unit could go in: an open end, in front of a backed unit, or anywhere for one on its own. */
 export interface SpaceView {
   key: SpaceKey
   candidates: EndCandidate[]
@@ -115,14 +117,20 @@ export function useLayoutView(
     if (!payload) return null
     const pieceById = pieceLookup(storefront.pieces)
     const labelOf = (pieceId: string) => pieceById.get(pieceId)?.label ?? 'Unit'
-    const expanded = layoutEntriesExpanded(draft.chain)
+    // The chain's units, then the ones standing on their own: the list's order,
+    // the plan's numbers and the basket's.
+    const freeEntries = draft.free.map(freeUnitEntry)
+    const expanded = [...layoutEntriesExpanded(draft.chain), ...freeEntries]
     const labels = expanded.map((entry) => labelOf(entry.pieceId))
-    const price = priceLayout(payload, storefront.pieceOptionId, draft.chain, layoutChoices, draft.unitChoices)
-    const footprint = footprintOfLayout(placed)
-    const limits = { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits }
+    const price = priceLayout(payload, storefront.pieceOptionId, [...draft.chain, ...freeEntries], layoutChoices, draft.unitChoices)
     const definitions = storefront.pieces.map((piece) => piece.definition)
-
     const definitionsById = new Map(definitions.map((definition) => [definition.pieceId, definition]))
+    // The floor the whole lot takes, free units included.
+    const footprint = footprintOfLayout([...placed, ...placeFreeUnits(draft.free, definitionsById)])
+    const layoutLimits = { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits, freeUnits: storefront.freeUnits }
+    const limits = chainLimitsBeside(draft.free, layoutLimits)
+    const unitCount = layoutPieceCount(draft.chain) + draft.free.length
+
     const endView = (end: ChainEnd): SpaceView => {
       const candidates = candidatesAtEnd(placed, end, definitions, limits)
       const neighbour = end === 'end' ? draft.chain[draft.chain.length - 1] : draft.chain[0]
@@ -169,19 +177,48 @@ export function useLayoutView(
       }]
     })
 
+    // Anywhere on the floor, for a unit that makes sense on its own. No dashed
+    // space: it goes somewhere clear and the shopper moves it where they like.
+    const freeCandidates = storefront.freeUnits ? definitions.filter(canStandFree) : []
+    const freeViews: SpaceView[] = freeCandidates.length === 0 ? [] : [{
+      key: FREE_SPACE_KEY,
+      candidates: freeCandidates.map((definition): EndCandidate => {
+        const outline = [
+          { x: -definition.widthMm / 2, z: -definition.depthMm / 2 },
+          { x: definition.widthMm / 2, z: -definition.depthMm / 2 },
+          { x: definition.widthMm / 2, z: definition.depthMm / 2 },
+          { x: -definition.widthMm / 2, z: definition.depthMm / 2 },
+        ]
+        const footprint = { minX: -definition.widthMm / 2, maxX: definition.widthMm / 2, minZ: -definition.depthMm / 2, maxZ: definition.depthMm / 2 }
+        return {
+          definition,
+          pose: { centre: { x: 0, z: 0 }, rotationY: 0 },
+          footprint,
+          flipped: false,
+          space: { outline, footprint },
+          refusal: unitCount >= storefront.maxPieces ? 'too-many-pieces' : null,
+        }
+      }),
+      ghost: null,
+      besideText: 'on its own',
+    }]
+    // Free units are written where they stand beside the chain's first unit.
+    const anchor = placed[0]?.pose ?? null
+
     return {
       price,
       labels,
-      shapeLabel: layoutShapeLabel(shapeOfPlaced(placed)),
+      // Units only standing on their own make no shape of their own.
+      shapeLabel: draft.chain.length === 0 && draft.free.length > 0 ? 'Free-standing' : layoutShapeLabel(shapeOfPlaced(placed)),
       footprint,
       footprintText: footprint ? describeFootprint(footprint) : '',
       widthText: footprint ? formatMetres(footprint.widthMm) : '',
       depthText: footprint ? formatMetres(footprint.depthMm) : '',
       countsText: describeUnitCounts(labels),
       arrangementText: describeArrangement(labels),
-      unitCountText: unitCountLabel(layoutPieceCount(draft.chain)),
+      unitCountText: unitCountLabel(unitCount),
       code: encodeLayout(
-        draft.chain.map((entry) => ({
+        [...draft.chain.map((entry) => ({
           pieceId: entry.pieceId,
           choices: draft.unitChoices[entry.entryId] ?? {},
           flipped: entry.flipped === true,
@@ -194,13 +231,19 @@ export function useLayoutView(
               }
             : undefined,
         })),
+        ...draft.free.map((unit) => ({
+          pieceId: unit.pieceId,
+          choices: draft.unitChoices[unit.entryId] ?? {},
+          flipped: false,
+          free: freeUnitSpot(unit, anchor),
+        }))],
         {
           pieceSlugById: new Map(storefront.pieces.map((piece) => [piece.pieceId, piece.valueSlug])),
           otherOptions: otherOptionsOf(payload, storefront.pieceOptionId),
         },
       ),
       childIdByEntry: new Map(price.units.map((unit) => [unit.entry.entryId, unit.variant?.childProductId ?? null])),
-      spaces: [endView('start'), endView('end'), ...cornerView('start'), ...cornerView('end'), ...frontViews],
+      spaces: [endView('start'), endView('end'), ...cornerView('start'), ...cornerView('end'), ...frontViews, ...freeViews],
     }
   }, [storefront, payload, draft, placed, layoutChoices])
 }

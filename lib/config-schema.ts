@@ -143,6 +143,13 @@ export const ConfiguratorConfigSchema = z.object({
    * off - a range that wants front units has to say so.
    */
   frontUnits: z.boolean().default(false),
+  /**
+   * Whether a unit that makes sense on its own - a table, a stool, an armchair
+   * (a straight unit with no back, or with arms both sides) - may be put
+   * anywhere on the floor round the layout and moved about, not only joined
+   * into it. Absent on a set-up saved before the choice existed, which reads as off.
+   */
+  freeUnits: z.boolean().default(false),
   pieces: z.array(PieceConfigSchema).max(100),
   /** Owner-made starting layouts. Empty means the storefront suggests its own. */
   presets: z.array(PresetConfigSchema).max(12),
@@ -189,6 +196,7 @@ export const EMPTY_CONFIGURATOR_CONFIG: ConfiguratorConfig = {
   pieceOptionName: '',
   maxPieces: DEFAULT_MAX_PIECES,
   frontUnits: false,
+  freeUnits: false,
   pieces: [],
   presets: [],
   viewSummary: 'always',

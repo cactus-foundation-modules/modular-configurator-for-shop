@@ -209,6 +209,7 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
     const config = {
       pieceOptionName: 'Unit',
       frontUnits: true,
+      freeUnits: false,
       maxPieces: 8,
       pieces: [
         { valueSlug: 'left-unit', shape: { kind: 'straight' as const, closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760, modelTurnDegrees: 0 as const },
@@ -257,6 +258,7 @@ suite('modular-configurator-for-shop raw SQL, against a real Postgres', () => {
     await configs.saveProductConfigurator(PARENT_ID, true, {
       pieceOptionName: 'Unit',
       frontUnits: true,
+      freeUnits: false,
       maxPieces: 8,
       pieces: [
         { valueSlug: 'left-unit', shape: { kind: 'straight', closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760, modelTurnDegrees: 'auto' },

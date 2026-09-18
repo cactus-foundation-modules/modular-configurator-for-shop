@@ -75,6 +75,7 @@ export async function loadConfiguratorBlockData(slug: string): Promise<Configura
       presets: presetsFor(saved.config, catalogue.valueIdBySlug, pieces),
       maxPieces: saved.config.maxPieces,
       frontUnits: saved.config.frontUnits,
+      freeUnits: saved.config.freeUnits,
       viewSummary: saved.config.viewSummary,
       viewer,
     },

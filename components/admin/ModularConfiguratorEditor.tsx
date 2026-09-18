@@ -223,6 +223,22 @@ export function ModularConfiguratorEditor({ productId }: { productId: string }) 
             </p>
           </label>
           <label style={{ display: 'grid', gap: '0.25rem' }}>
+            <span style={labelStyle}>
+              <input
+                type="checkbox"
+                checked={config.freeUnits}
+                onChange={(event) => changeConfig({ ...config, freeUnits: event.target.checked })}
+                style={{ marginRight: '0.5rem' }}
+              />
+              Units on their own
+            </span>
+            <p style={hintStyle}>
+              Lets shoppers put a table, a stool or an armchair anywhere on the floor round their layout, as many as they like within the
+              layout limit, and drag them about. Only units that make sense on their own are offered: a straight unit with no back, or one
+              with arms both sides.
+            </p>
+          </label>
+          <label style={{ display: 'grid', gap: '0.25rem' }}>
             <span style={labelStyle}>Layout summary over the view</span>
             <select
               style={fieldStyle}

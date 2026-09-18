@@ -3,7 +3,8 @@
 // The panel for one selected unit, opened under the row of unit pills:
 // swap it for another type that still fits, curve a backless curve the other
 // way, turn a backless unit beside a corner to line up with the row, give it
-// choices of its own (a contrasting fabric, say), or take it out.
+// choices of its own (a contrasting fabric, say), or take it out. A unit
+// standing on its own is moved by dragging it in the view, and turned here.
 import { useId } from 'react'
 import { SwatchSelect } from '@/modules/modular-configurator-for-shop/components/public/SwatchSelect'
 import { swatchOf } from '@/modules/modular-configurator-for-shop/components/public/swatch-style'
@@ -28,6 +29,8 @@ interface UnitEditorProps {
   onTurn?: () => void
   /** The unit is turned already, so the button turns it back. */
   turned?: boolean
+  /** The unit stands on its own: it is moved in the view, and turned a step at a time here. */
+  standsFree?: boolean
   /** Whether this unit comes in a value at all, keeping its other choices. */
   isMadeIn: (optionId: string, valueId: string) => boolean
   onSwap: (pieceId: string) => void
@@ -51,6 +54,7 @@ export function UnitEditor({
   onFlip,
   onTurn,
   turned = false,
+  standsFree = false,
   isMadeIn,
   onSwap,
   frontSpurTo,
@@ -88,7 +92,18 @@ export function UnitEditor({
         </div>
       ) : null}
 
-      {onTurn ? (
+      {standsFree ? (
+        <div className="mcf-section">
+          <p className="mcf-section-note">It stands on its own: drag it about in the view to move it, or pick it in Plan and use the arrow keys</p>
+          {onTurn ? (
+            <div className="mcf-row">
+              <button type="button" className="mcf-chip" onClick={onTurn}>
+                Turn it
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : onTurn ? (
         <div className="mcf-section">
           <p className="mcf-section-note">This unit has no back, so it can face either way</p>
           <div className="mcf-row">

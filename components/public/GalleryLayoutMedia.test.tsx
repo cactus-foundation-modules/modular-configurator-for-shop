@@ -23,6 +23,7 @@ function snapshot(revision: number, wanted: boolean): LayoutStageSnapshot {
     parentProductId: 'parent',
     look: P3D_CONFIG_DEFAULTS,
     placed: [],
+    movableEntryIds: new Set(),
     pieceById: new Map(),
     childIdByEntry: new Map(),
     ghosts: [],
@@ -37,6 +38,8 @@ function snapshot(revision: number, wanted: boolean): LayoutStageSnapshot {
     onSelectUnit: () => {},
     onPickGhost: () => {},
     onRemoveUnit: () => {},
+    canMoveUnitTo: () => true,
+    onMoveUnit: () => true,
   }
 }
 

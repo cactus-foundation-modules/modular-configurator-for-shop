@@ -101,6 +101,7 @@ const PRESET_PROBLEM_WORDING: Record<NonNullable<ReturnType<typeof findChainProb
   'piece-closed-on-joining-side': 'a unit is joined on to an arm',
   'neighbours-cannot-join': 'two neighbouring units meet arm to seat',
   'front-units-not-offered': 'it stands a unit in front of another, which this range is not set to allow',
+  'cannot-stand-free': 'it stands a unit on its own that only joins a layout',
   'would-overlap': 'the units would sit on top of each other',
   'too-many-pieces': 'it has more units than the layout limit',
   'unknown-entry': 'it names a unit that is not set up',

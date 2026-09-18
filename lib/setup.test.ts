@@ -19,6 +19,7 @@ const UNIT_OPTION = {
 const CONFIG: ConfiguratorConfig = {
   pieceOptionName: 'Unit',
   frontUnits: true,
+  freeUnits: false,
   maxPieces: 12,
   pieces: [
     { valueSlug: 'left-unit', shape: { kind: 'straight', closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760, modelTurnDegrees: 0 },
@@ -129,6 +130,11 @@ describe('checking a set-up before it is saved', () => {
   it('reads a set-up saved before the choice existed as not standing units in front', () => {
     const { frontUnits: _dropped, ...beforeTheChoice } = CONFIG
     expect(parseStoredConfig(beforeTheChoice).frontUnits).toBe(false)
+  })
+
+  it('reads a set-up saved before the choice existed as not letting units stand on their own', () => {
+    const { freeUnits: _dropped, ...beforeTheChoice } = CONFIG
+    expect(parseStoredConfig(beforeTheChoice).freeUnits).toBe(false)
   })
 
   it('reads a damaged stored row as not set up rather than breaking the page', () => {
