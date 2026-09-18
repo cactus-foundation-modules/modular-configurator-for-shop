@@ -7,6 +7,8 @@
 import { useMemo } from 'react'
 import {
   candidatesAtEnd,
+  candidatesRoundCorner,
+  cornerSpaceKey,
   candidatesInFront,
   endPlan,
   frontSpaceKey,
@@ -136,6 +138,19 @@ export function useLayoutView(
         besideText,
       }
     }
+    // Round the corner from a table at either end, where the table can sit in
+    // the crook of an L and the next row go off its front.
+    const cornerView = (end: ChainEnd): SpaceView[] => {
+      const candidates = candidatesRoundCorner(placed, end, definitions, limits)
+      const neighbour = end === 'end' ? draft.chain[draft.chain.length - 1] : draft.chain[0]
+      if (candidates.length === 0 || !neighbour) return []
+      return [{
+        key: cornerSpaceKey(end),
+        candidates,
+        ghost: candidates.find((candidate) => candidate.refusal === null) ?? null,
+        besideText: `round the corner from ${labelOf(neighbour.pieceId)}`,
+      }]
+    }
     // A space in front of every backed unit that could take a backless one. Only
     // a range with both kinds of straight unit has any. Where two units share a
     // label, the list number says which is meant.
@@ -171,6 +186,7 @@ export function useLayoutView(
           choices: draft.unitChoices[entry.entryId] ?? {},
           flipped: entry.flipped === true,
           turned: entry.turned === true,
+          ...(entry.cornered ? { cornered: entry.cornered } : {}),
           front: entry.frontSpur
             ? {
                 pieceId: entry.frontSpur.pieceId,
@@ -184,7 +200,7 @@ export function useLayoutView(
         },
       ),
       childIdByEntry: new Map(price.units.map((unit) => [unit.entry.entryId, unit.variant?.childProductId ?? null])),
-      spaces: [endView('start'), endView('end'), ...frontViews],
+      spaces: [endView('start'), endView('end'), ...cornerView('start'), ...cornerView('end'), ...frontViews],
     }
   }, [storefront, payload, draft, placed, layoutChoices])
 }

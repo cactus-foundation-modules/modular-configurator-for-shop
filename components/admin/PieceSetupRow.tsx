@@ -72,7 +72,7 @@ function halfCurveSized(piece: PieceConfig, width: number): PieceConfig {
  * A millimetre field that lets the owner clear it and type afresh: the text is
  * held as typed, and only a whole number reaches the set-up.
  */
-function MillimetreInput({ label, value, onCommit }: { label: string; value: number; onCommit: (millimetres: number) => void }) {
+function MillimetreInput({ label, value, onCommit, min = 50 }: { label: string; value: number; onCommit: (millimetres: number) => void; min?: number }) {
   const [text, setText] = useState(String(value))
   const [shown, setShown] = useState(value)
   // A new figure from outside (the specification button) replaces what is typed.
@@ -87,13 +87,13 @@ function MillimetreInput({ label, value, onCommit }: { label: string; value: num
         style={numberFieldStyle}
         type="number"
         inputMode="numeric"
-        min={50}
+        min={min}
         max={6000}
         value={text}
         onChange={(event) => {
           setText(event.target.value)
           const parsed = Math.round(Number(event.target.value))
-          if (event.target.value !== '' && Number.isFinite(parsed) && parsed > 0) {
+          if (event.target.value !== '' && Number.isFinite(parsed) && (parsed > 0 || (min === 0 && parsed === 0))) {
             setShown(parsed)
             onCommit(parsed)
           }
@@ -159,6 +159,10 @@ function shapeHint(piece: PieceConfig): string {
       return 'Width is the flat side, which joins two rows sat back to back. Depth is how far the rounded part sticks out.'
     case 'segment':
       return `A straight-sided, wedge-shaped unit whose sides splay apart, so each one bends the row. Width is its wide side (arm included, where it has one); depth is from its back to its front; the angle is how far apart its two sides splay, which is how far it bends the row.${circleCount(piece.shape.angleDegrees)}`
+    case 'straight':
+      return piece.shape.backless === true
+        ? 'Width is across the front of the unit; depth is from the back to the front. It lines up with the front of the seats beside it. Ticked to sit in a corner, a shopper can send the next row off round it, the unit in the crook of the L.'
+        : 'Width is across the front of the unit; depth is from the back to the front of the seat. Cushion overhang is how far the seat cushion stands proud of the base at the front: a unit with no back beside it lines up with the base rather than the cushion.'
     default:
       return 'Width is across the front of the unit; depth is from the back to the front of the seat.'
   }
@@ -231,6 +235,28 @@ export function PieceSetupRow({ value, piece, onChange }: PieceSetupRowProps) {
                 onCommit={(widthMm) => onChange({ ...piece, widthMm })}
               />
               <MillimetreInput label="Depth (mm)" value={piece.depthMm} onCommit={(depthMm) => onChange({ ...piece, depthMm })} />
+              {piece.shape.kind === 'straight' && piece.shape.backless !== true ? (
+                <MillimetreInput
+                  label="Cushion overhang (mm)"
+                  min={0}
+                  value={piece.shape.overhangMm ?? 0}
+                  onCommit={(overhangMm) => {
+                    if (piece.shape.kind === 'straight') onChange({ ...piece, shape: { ...piece.shape, overhangMm: Math.min(overhangMm, piece.depthMm) } })
+                  }}
+                />
+              ) : null}
+              {piece.shape.kind === 'straight' && piece.shape.backless === true ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={piece.shape.cornerable === true}
+                    onChange={(event) => {
+                      if (piece.shape.kind === 'straight') onChange({ ...piece, shape: { ...piece.shape, cornerable: event.target.checked } })
+                    }}
+                  />
+                  Can sit in a corner
+                </label>
+              ) : null}
               {piece.shape.kind === 'segment' ? (
                 <AngleInput
                   value={piece.shape.angleDegrees}

@@ -50,6 +50,17 @@
  * sharing their back corner in its middle. Walking in through the left half and
  * out of the right half turns the chain right round.
  *
+ * A backless straight unit the range marks as able to sit in a corner can be
+ * laid CORNERED: it takes a corner's two open faces, one side and its front,
+ * with the entry's `cornered` naming the side a corner's second back would be
+ * on. So a table at the end of a row can have the next row go off round it,
+ * the table in the crook of the L, rather than only carrying the row on.
+ *
+ * A backed straight unit whose seat cushion stands proud of its base carries
+ * that overhang. A backless unit beside it lines up with the base, not the
+ * cushion, and two rows meeting round a cornered table may have their cushions
+ * overhang each other without that counting as sitting on top of one another.
+ *
  * A backless straight unit can be TURNED a quarter: the walk then goes in through
  * its back and out through its front instead of its sides, and a join either
  * side of it lines up the middles of the two faces. Out of a corner, that stands
@@ -94,6 +105,13 @@ export type PieceShape =
       /** No backrest. Side joins align seat fronts, not backs, so a shallower
        *  module sits flush with its neighbours' fronts rather than its rear edge. */
       backless?: boolean
+      /**
+       * Backed units only: how far the seat cushion stands proud of the base at
+       * the front, in millimetres. A backless neighbour lines up with the base.
+       */
+      overhangMm?: number
+      /** Backless units only: may be laid as a corner, with a row going off its front. */
+      cornerable?: boolean
     }
   | {
       kind: 'corner'
@@ -153,6 +171,8 @@ export interface ChainEntry {
   frontSpur?: FrontSpur
   /** A backless straight unit turned a quarter, joined through its back and front. */
   turned?: boolean
+  /** A backless straight unit laid as a corner, with a corner's second back on this side. */
+  cornered?: CornerBackSide
 }
 
 /** Where one piece sits on the floor. `rotationY` matches three.js `rotation.y`. */
@@ -376,7 +396,7 @@ function roundEndFace(depthMm: number, towardsLeft: boolean): JoinFace {
 }
 
 /** How an entry is laid, as far as its faces care. */
-type EntryLay = Pick<ChainEntry, 'flipped' | 'turned'>
+type EntryLay = Pick<ChainEntry, 'flipped' | 'turned' | 'cornered'>
 
 /** True for a backless straight unit laid turned a quarter. */
 export function isTurned(definition: PieceDefinition, lay: EntryLay): boolean {
@@ -386,6 +406,23 @@ export function isTurned(definition: PieceDefinition, lay: EntryLay): boolean {
 /** True for a piece that can be turned a quarter: a straight unit with no back. */
 export function canBeTurned(definition: PieceDefinition): boolean {
   return isStraightBackless(definition)
+}
+
+/** True for a piece that may be laid as a corner: a backless straight unit the range says can. */
+export function canTurnCorner(definition: PieceDefinition): boolean {
+  return definition.shape.kind === 'straight' && definition.shape.backless === true && definition.shape.cornerable === true
+}
+
+/** Which way a backless unit is laid as a corner, or null when it carries the row straight on. */
+export function cornerLayOf(definition: PieceDefinition, lay: EntryLay): CornerBackSide | null {
+  return lay.cornered && !lay.turned && canTurnCorner(definition) ? lay.cornered : null
+}
+
+/** How far a backed straight unit's cushion stands proud of its base; 0 for anything else. */
+export function seatOverhangOf(definition: PieceDefinition): number {
+  const { shape } = definition
+  if (shape.kind !== 'straight' || shape.backless === true) return 0
+  return Math.min(Math.max(shape.overhangMm ?? 0, 0), definition.depthMm)
 }
 
 /**
@@ -404,7 +441,8 @@ function entryFaceOf(definition: PieceDefinition, lay: EntryLay): JoinFace {
   const { flipped } = lay
   switch (shape.kind) {
     case 'straight':
-      return isTurned(definition, lay) ? turnedFace(widthMm, depthMm, 'back') : leftFace(widthMm, depthMm)
+      if (isTurned(definition, lay)) return turnedFace(widthMm, depthMm, 'back')
+      return cornerLayOf(definition, lay) === 'left' ? cornerFrontFace(widthMm, depthMm, 'left') : leftFace(widthMm, depthMm)
     case 'corner':
       return shape.backSide === 'left' ? cornerFrontFace(widthMm, depthMm, 'left') : leftFace(widthMm, depthMm)
     case 'curve':
@@ -424,7 +462,8 @@ function exitFaceOf(definition: PieceDefinition, lay: EntryLay): JoinFace {
   const { flipped } = lay
   switch (shape.kind) {
     case 'straight':
-      return isTurned(definition, lay) ? turnedFace(widthMm, depthMm, 'front') : rightFace(widthMm, depthMm)
+      if (isTurned(definition, lay)) return turnedFace(widthMm, depthMm, 'front')
+      return cornerLayOf(definition, lay) === 'right' ? cornerFrontFace(widthMm, depthMm, 'right') : rightFace(widthMm, depthMm)
     case 'corner':
       return shape.backSide === 'left' ? rightFace(widthMm, depthMm) : cornerFrontFace(widthMm, depthMm, 'right')
     case 'curve':
@@ -488,7 +527,11 @@ function faceLength(face: JoinFace, definition: PieceDefinition): number {
 
 /** A point `share` of the way along a face from its back corner towards its front end. */
 function alongFace(face: JoinFace, definition: PieceDefinition, share: number): FloorVector {
-  const distance = faceLength(face, definition) * share
+  return alongFaceBy(face, faceLength(face, definition) * share)
+}
+
+/** A point `distance` millimetres along a face from its back corner towards its front end. */
+function alongFaceBy(face: JoinFace, distance: number): FloorVector {
   return {
     x: roundMillimetre(face.backCorner.x + face.towardsFront.x * distance),
     z: roundMillimetre(face.backCorner.z + face.towardsFront.z * distance),
@@ -499,11 +542,12 @@ function alongFace(face: JoinFace, definition: PieceDefinition, share: number): 
  * The point on a face that meets the neighbour's, in the piece's own frame. A
  * seat-front join lines up the front ends of the two faces, so the shallower
  * backless unit sits flush with its neighbour's front - along a straight run,
- * and against either open side of a corner, whichever way that side faces. A
+ * and against either open side of a corner, whichever way that side faces. On a
+ * seat whose cushion stands proud, the front end is the front of its base. A
  * join beside a turned unit lines up the middles.
  */
 function joinAnchorLocal(face: JoinFace, definition: PieceDefinition, anchor: JoinAnchor): FloorVector {
-  if (anchor === 'front') return alongFace(face, definition, 1)
+  if (anchor === 'front') return alongFaceBy(face, faceLength(face, definition) - seatOverhangOf(definition))
   if (anchor === 'middle') return alongFace(face, definition, 0.5)
   return face.backCorner
 }
@@ -879,6 +923,20 @@ export function floorOutline(piece: PlacedPiece): FloorVector[][] {
 }
 
 /**
+ * A piece's floor shape less any seat cushion standing proud of its base, for
+ * telling whether two pieces sit on top of each other: cushions may overhang one
+ * another in the crook of an L, bases may not.
+ */
+function solidOutline(piece: PlacedPiece): FloorVector[][] {
+  const overhang = seatOverhangOf(piece.definition)
+  if (overhang <= 0) return floorOutline(piece)
+  const { widthMm: width, depthMm: depth } = piece.definition
+  const front = depth / 2 - overhang
+  const local = [{ x: -width / 2, z: -depth / 2 }, { x: width / 2, z: -depth / 2 }, { x: width / 2, z: front }, { x: -width / 2, z: front }]
+  return [local.map((corner) => pointOnPiece(piece.pose, corner))]
+}
+
+/**
  * The one outline a piece's space is drawn with on the floor - the dashed "+"
  * space, the highlight under a chosen unit: a wedge's own four sides, and for
  * every other piece its box, turned as the piece is. Square to the room that box
@@ -929,8 +987,8 @@ function convexPolygonsOverlap(first: readonly FloorVector[], second: readonly F
  */
 export function piecesOverlap(first: PlacedPiece, second: PlacedPiece): boolean {
   if (!footprintsOverlap(first.footprint, second.footprint)) return false
-  const firstOutline = floorOutline(first)
-  const secondOutline = floorOutline(second)
+  const firstOutline = solidOutline(first)
+  const secondOutline = solidOutline(second)
   return firstOutline.some((polygon) => secondOutline.some((other) => convexPolygonsOverlap(polygon, other)))
 }
 

@@ -27,6 +27,7 @@ import {
   commitPlacement,
   layoutPieceCount,
   type ChainEnd,
+  type CornerBackSide,
   type ChainEntry,
   type FrontSpur,
   type PieceDefinition,
@@ -59,11 +60,13 @@ export type BuilderAction =
         choices?: OptionSelection
         flipped?: boolean
         turned?: boolean
+        cornered?: CornerBackSide
         front?: { pieceId: string; choices?: OptionSelection }
       }>
       byShopper: boolean
     }
-  | { type: 'add'; end: ChainEnd; pieceId: string }
+  /** `roundCorner`: lay the table at that end as a corner and send the new unit off round it. */
+  | { type: 'add'; end: ChainEnd; pieceId: string; roundCorner?: boolean }
   /** `select`: open the new unit's panel - yes from a unit's own panel, no from a dashed space, like an end. */
   | { type: 'add-front-spur'; hostEntryId: string; pieceId: string; select: boolean }
   | { type: 'remove'; entryId: string }
@@ -143,6 +146,7 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
             pieceId: unit.pieceId,
             ...(unit.flipped ? { flipped: true } : {}),
             ...(unit.turned ? { turned: true } : {}),
+            ...(unit.cornered ? { cornered: unit.cornered } : {}),
           }
           if (unit.choices) unitChoices[entryId] = unit.choices
           // A layout written before the range stopped standing units in front
@@ -164,7 +168,7 @@ function createReducer(definitions: ReadonlyMap<string, PieceDefinition>, limits
       }
       case 'add': {
         const entryId = entryIdFor(state.nextEntryNumber)
-        const result = addAtEnd(state.draft.chain, action.end, { entryId, pieceId: action.pieceId }, definitions, limits)
+        const result = addAtEnd(state.draft.chain, action.end, { entryId, pieceId: action.pieceId }, definitions, limits, { roundCorner: action.roundCorner === true })
         // The new unit is not selected: a shopper laying out a row adds several in
         // a go, and a unit panel opening after each one would be in their way.
         return applyEdit(state, result, { nextEntryNumber: state.nextEntryNumber + 1 })

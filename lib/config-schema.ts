@@ -28,6 +28,10 @@ const StraightShapeSchema = z.object({
   closedLeft: z.boolean(),
   closedRight: z.boolean(),
   backless: z.boolean().optional(),
+  /** Backed units: how far the seat cushion stands proud of the base at the front. */
+  overhangMm: z.number().int().min(0).max(MAX_UNIT_SIDE_MM).optional(),
+  /** Backless units: may be laid as a corner, with the next row going off its front. */
+  cornerable: z.boolean().optional(),
 })
 
 const CornerShapeSchema = z.object({
@@ -107,6 +111,8 @@ export const PresetUnitSchema = z.object({
   turned: z.boolean().optional(),
   /** This unit with no back (a curve or wedge) laid the other way round. */
   flipped: z.boolean().optional(),
+  /** This table laid as a corner, with a corner's second back on this side. */
+  cornered: z.enum(['left', 'right']).optional(),
 })
 
 export const PresetConfigSchema = z.object({
@@ -163,8 +169,9 @@ export function presetWithUnits(preset: PresetConfig, units: readonly PresetUnit
     ...(unit.frontSlug ? { frontSlug: unit.frontSlug } : {}),
     ...(unit.turned ? { turned: true } : {}),
     ...(unit.flipped ? { flipped: true } : {}),
+    ...(unit.cornered ? { cornered: unit.cornered } : {}),
   }))
-  const saysMore = tidy.some((unit) => unit.frontSlug !== undefined || unit.turned === true || unit.flipped === true)
+  const saysMore = tidy.some((unit) => unit.frontSlug !== undefined || unit.turned === true || unit.flipped === true || unit.cornered !== undefined)
   const written: PresetConfig = { name: preset.name, valueSlugs: tidy.map((unit) => unit.valueSlug) }
   return saysMore ? { ...written, units: tidy } : written
 }
@@ -173,7 +180,7 @@ export function presetWithUnits(preset: PresetConfig, units: readonly PresetUnit
 export function presetWithoutUnit(preset: PresetConfig, valueSlug: string): PresetConfig {
   const units = presetUnitsOf(preset)
     .filter((unit) => unit.valueSlug !== valueSlug)
-    .map((unit) => (unit.frontSlug === valueSlug ? { valueSlug: unit.valueSlug, turned: unit.turned, flipped: unit.flipped } : unit))
+    .map((unit) => (unit.frontSlug === valueSlug ? { valueSlug: unit.valueSlug, turned: unit.turned, flipped: unit.flipped, cornered: unit.cornered } : unit))
   return presetWithUnits(preset, units)
 }
 export type ConfiguratorConfig = z.infer<typeof ConfiguratorConfigSchema>

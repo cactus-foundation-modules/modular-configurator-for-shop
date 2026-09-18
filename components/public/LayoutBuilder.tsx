@@ -203,6 +203,13 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
         setPickerSpace(key)
         return
       }
+      if (space.kind === 'corner') {
+        // The new unit starts a row round the corner, and that row's open end is
+        // where the next one goes.
+        dispatch({ type: 'add', end: space.end, pieceId, roundCorner: true })
+        setPickerSpace(space.end)
+        return
+      }
       // A unit in front fills its space, so there is nothing left to pick for it.
       dispatch({ type: 'add-front-spur', hostEntryId: space.hostEntryId, pieceId, select: false })
       setPickerSpace(null)
@@ -269,6 +276,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
               pieceId: unit.pieceId,
               ...(unit.flipped ? { flipped: true } : {}),
               ...(unit.turned ? { turned: true } : {}),
+              ...(unit.cornered ? { cornered: unit.cornered } : {}),
               ...(unit.frontPieceId ? { front: { pieceId: unit.frontPieceId } } : {}),
             })),
             byShopper: true,

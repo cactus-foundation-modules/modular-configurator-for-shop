@@ -12,6 +12,7 @@ import {
   anchorLayout,
   canBeFrontSpur,
   canBeTurned,
+  canTurnCorner,
   boundsOfOutline,
   canHostFrontSpur,
   endSpaceOutline,
@@ -26,6 +27,7 @@ import {
   placeFrontSpur,
   placeLayout,
   type ChainEnd,
+  type CornerBackSide,
   type ChainEntry,
   type FrontSpur,
   type PieceDefinition,
@@ -45,6 +47,8 @@ export type EditRefusal =
   | 'cannot-flip'
   /** Only a straight unit with no back can be turned a quarter. */
   | 'cannot-turn'
+  /** Only a unit with no back that the range lets sit in a corner can be laid as one. */
+  | 'cannot-corner'
   /** The new piece's arm or end panel would face into the layout. */
   | 'piece-closed-on-joining-side'
   /** The piece would sit on top of another. */
@@ -93,25 +97,36 @@ export interface ChainLimits {
 
 /**
  * A space a new unit can go in, as one string the view islands can pass around:
- * an open end of the chain, or the floor in front of a backed unit
- * (`front:<host entry id>`) where a backless one can stand.
+ * an open end of the chain, the floor round the corner from a table at one end
+ * (`corner:start`, `corner:end`), where the next row can go off its front, or
+ * the floor in front of a backed unit (`front:<host entry id>`) where a backless
+ * one can stand.
  */
-export type SpaceKey = ChainEnd | `front:${string}`
+export type SpaceKey = ChainEnd | `corner:${ChainEnd}` | `front:${string}`
 
-export type LayoutSpace = { kind: 'end'; end: ChainEnd } | { kind: 'front'; hostEntryId: string }
+export type LayoutSpace = { kind: 'end'; end: ChainEnd } | { kind: 'corner'; end: ChainEnd } | { kind: 'front'; hostEntryId: string }
 
 const FRONT_SPACE_PREFIX = 'front:'
+const CORNER_SPACE_KEYS = { start: 'corner:start', end: 'corner:end' } as const satisfies Record<ChainEnd, SpaceKey>
 
 export function frontSpaceKey(hostEntryId: string): SpaceKey {
   return `${FRONT_SPACE_PREFIX}${hostEntryId}`
 }
 
+export function cornerSpaceKey(end: ChainEnd): SpaceKey {
+  return CORNER_SPACE_KEYS[end]
+}
+
 export function isSpaceKey(value: unknown): value is SpaceKey {
-  return value === 'start' || value === 'end' || (typeof value === 'string' && value.startsWith(FRONT_SPACE_PREFIX) && value.length > FRONT_SPACE_PREFIX.length)
+  if (value === 'start' || value === 'end' || value === CORNER_SPACE_KEYS.start || value === CORNER_SPACE_KEYS.end) return true
+  return typeof value === 'string' && value.startsWith(FRONT_SPACE_PREFIX) && value.length > FRONT_SPACE_PREFIX.length
 }
 
 export function spaceOfKey(key: SpaceKey): LayoutSpace {
-  return key === 'start' || key === 'end' ? { kind: 'end', end: key } : { kind: 'front', hostEntryId: key.slice(FRONT_SPACE_PREFIX.length) }
+  if (key === 'start' || key === 'end') return { kind: 'end', end: key }
+  if (key === CORNER_SPACE_KEYS.start) return { kind: 'corner', end: 'start' }
+  if (key === CORNER_SPACE_KEYS.end) return { kind: 'corner', end: 'end' }
+  return { kind: 'front', hostEntryId: key.slice(FRONT_SPACE_PREFIX.length) }
 }
 
 /** One unit of a layout written down rather than built: a ready-made layout's, say. */
@@ -123,6 +138,8 @@ export interface LayoutUnitSpec {
   turned?: boolean
   /** This unit with no back (a curve or wedge) laid the other way round. */
   flipped?: boolean
+  /** This backless unit laid as a corner, with a corner's second back on this side. */
+  cornered?: CornerBackSide
 }
 
 /** The chain a written-down layout describes, with entry ids made from `idPrefix`. */
@@ -132,6 +149,7 @@ export function chainFromUnits(units: readonly LayoutUnitSpec[], idPrefix: strin
     pieceId: unit.pieceId,
     ...(unit.flipped ? { flipped: true } : {}),
     ...(unit.turned ? { turned: true } : {}),
+    ...(unit.cornered ? { cornered: unit.cornered } : {}),
     ...(unit.frontPieceId ? { frontSpur: { entryId: `${idPrefix}${index}-front`, pieceId: unit.frontPieceId } } : {}),
   }))
 }
@@ -153,6 +171,7 @@ export function findChainProblem(
     if (!definition) return 'unknown-piece'
     if (previous && !canJoin(previous, definition)) return 'neighbours-cannot-join'
     if (entry.turned && !canBeTurned(definition)) return 'cannot-turn'
+    if (entry.cornered && (entry.turned || !canTurnCorner(definition))) return 'cannot-corner'
     if (entry.frontSpur) {
       if (limits.frontUnits !== true) return 'front-units-not-offered'
       const spurDefinition = definitions.get(entry.frontSpur.pieceId)
@@ -285,6 +304,64 @@ export function candidatesAtEnd(
 
 const ORIGIN_POSE: PiecePose = { centre: { x: 0, z: 0 }, rotationY: 0 }
 
+/** Which side a corner's second back would be on, for a table the next row goes round from this end. */
+function cornerSideAt(end: ChainEnd): CornerBackSide {
+  return end === 'end' ? 'right' : 'left'
+}
+
+/**
+ * The chain with the unit at one end laid as a corner, so a unit added at that
+ * end goes off round it, or null where that is not on offer: the end unit is not
+ * a backless unit the range lets sit in a corner, it is turned or cornered
+ * already, the end is closed, or the unit is on its own (a lone table has no row
+ * to be the corner of yet).
+ */
+function chainCorneredAt(chain: readonly ChainEntry[], end: ChainEnd, definitions: ReadonlyMap<string, PieceDefinition>): ChainEntry[] | null {
+  if (chain.length < 2) return null
+  const index = end === 'end' ? chain.length - 1 : 0
+  const edge = chain[index]
+  const definition = edge ? definitions.get(edge.pieceId) : undefined
+  if (!edge || !definition || !canTurnCorner(definition) || edge.turned || edge.cornered) return null
+  const plan = endPlan(chain, end, definitions)
+  if (!plan || plan.displacedEntryId) return null
+  const next = [...chain]
+  next[index] = { ...edge, cornered: cornerSideAt(end) }
+  return next
+}
+
+/**
+ * Every piece type offered round the corner from a table at one end: the table
+ * is laid as a corner and the new unit goes off its front, the table in the
+ * crook of the L. Empty where that end has no such table. Refused pieces stay in
+ * the list with their reason, as at an end.
+ */
+export function candidatesRoundCorner(
+  placed: readonly PlacedPiece[],
+  end: ChainEnd,
+  definitions: readonly PieceDefinition[],
+  limits: ChainLimits,
+): EndCandidate[] {
+  const chain = mainChainOf(placed)
+  const byId = new Map([...placed.map((piece) => piece.definition), ...definitions].map((definition) => [definition.pieceId, definition]))
+  const cornered = chainCorneredAt(chain, end, byId)
+  const edgeEntry = cornered ? (end === 'end' ? cornered[cornered.length - 1] : cornered[0]) : undefined
+  if (!cornered || !edgeEntry) return []
+  const corneredPlaced = anchorLayout(placeChain(cornered, byId), placed)
+  const edgePiece = corneredPlaced.find((piece) => piece.entry.entryId === edgeEntry.entryId)
+  if (!edgePiece) return []
+  const outline = endSpaceOutline(edgePiece, end)
+  const space = { outline, footprint: boundsOfOutline(outline) }
+  return definitions.map((definition) => {
+    const result = addAtEnd(chain, end, { entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId }, byId, limits, { roundCorner: true })
+    const trial = result.ok ? result.chain : insertedAt(cornered, end === 'end' ? cornered.length : 0, { entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId })
+    const marker = anchorLayout(placeChain(trial, byId), placed).find((piece) => piece.entry.entryId === PROBE_ENTRY_ID)
+    const pose = marker?.pose ?? ORIGIN_POSE
+    const flipped = marker?.entry.flipped === true
+    const footprint = marker?.footprint ?? footprintAt(definition, pose, flipped)
+    return { definition, pose, footprint, flipped, space, refusal: result.ok ? null : result.refusal }
+  })
+}
+
 /**
  * Every backless type offered in front of one backed straight unit, each drawn
  * where it would stand and refused where it cannot (the layout is full, or it
@@ -328,20 +405,28 @@ function checked(
   return problem ? { ok: false, refusal: problem } : { ok: true, chain, displacedEntryId: null }
 }
 
+export interface AddOptions {
+  /** Lay the table at that end as a corner and send the new unit off round it. */
+  roundCorner?: boolean
+}
+
 export function addAtEnd(
   chain: readonly ChainEntry[],
   end: ChainEnd,
   entry: ChainEntry,
   definitions: ReadonlyMap<string, PieceDefinition>,
   limits: ChainLimits,
+  options: AddOptions = {},
 ): EditResult {
   if (!definitions.has(entry.pieceId)) return { ok: false, refusal: 'unknown-piece' }
   const plan = endPlan(chain, end, definitions)
   if (!plan) return { ok: false, refusal: isClosedChain(chain, definitions) ? 'layout-is-closed' : 'end-is-closed' }
+  const base = options.roundCorner ? chainCorneredAt(chain, end, definitions) : chain
+  if (!base) return { ok: false, refusal: 'cannot-corner' }
   if (layoutPieceCount(chain) >= limits.maxPieces) return { ok: false, refusal: 'too-many-pieces' }
   let firstRefusal: EditRefusal | null = null
   for (const laid of waysToLay(entry, definitions)) {
-    const trial = insertedAt(chain, plan.insertAt, laid)
+    const trial = insertedAt(base, plan.insertAt, laid)
     const refusal = refusalForAddition(findChainProblem(trial, definitions, limits))
     if (!refusal) return { ok: true, chain: trial, displacedEntryId: plan.displacedEntryId }
     firstRefusal ??= refusal
@@ -366,10 +451,25 @@ export function removeEntry(
   const index = chain.findIndex((entry) => entry.entryId === entryId)
   if (index === -1) return { ok: false, refusal: 'unknown-entry' }
   return checked(
-    chain.filter((entry) => entry.entryId !== entryId),
+    withEndsStraightened(chain.filter((entry) => entry.entryId !== entryId)),
     definitions,
     limits,
   )
+}
+
+/**
+ * A table laid as a corner is only ever the crook of an L. Left at an end with
+ * the row round it taken away, it goes back to carrying its row straight on, so
+ * the end offers the same spaces it did before the corner was turned.
+ */
+function withEndsStraightened(chain: ChainEntry[]): ChainEntry[] {
+  const last = chain.length - 1
+  return chain.map((entry, index) => {
+    const leftLoose = (index === 0 && entry.cornered === 'left') || (index === last && entry.cornered === 'right')
+    if (!leftLoose) return entry
+    const { cornered: _cornered, ...straight } = entry
+    return straight
+  })
 }
 
 /** Puts a backless unit on the front edge of a backed straight module. */
@@ -437,10 +537,13 @@ export function replaceEntry(
     const next = [...chain]
     const replacementDefinition = definitions.get(laid.pieceId)
     const carried = next[index]?.frontSpur
+    // A table in the crook of an L swapped for another that can sit there keeps the L.
+    const corner = next[index]?.cornered
+    const keepsCorner = corner && replacementDefinition && canTurnCorner(replacementDefinition) ? { cornered: corner } : {}
     next[index] =
       carried && replacementDefinition && canHostFrontSpur(replacementDefinition)
-        ? { ...laid, frontSpur: carried }
-        : laid
+        ? { ...laid, ...keepsCorner, frontSpur: carried }
+        : { ...laid, ...keepsCorner }
     const result = checked(next, definitions, limits)
     if (result.ok) return result
     firstRefusal ??= result

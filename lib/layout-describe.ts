@@ -1,7 +1,7 @@
 // Words for a layout: what shape it is, what it is made of, how big it is. Used
 // on the product page, in the builder and on the basket line, so the shopper and
 // whoever packs the order read the same description.
-import { curveLayOf, layoutBounds, layoutIsClosed, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { cornerLayOf, curveLayOf, layoutBounds, layoutIsClosed, type PlacedPiece } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 
 export type LayoutShape = 'straight' | 'l-shape' | 'u-shape' | 'wraparound' | 'serpentine' | 'back-to-back' | 'island' | 'curved'
 
@@ -40,7 +40,7 @@ export function layoutShapeLabel(shape: LayoutShape): string {
  */
 function quarterTurnOf(piece: PlacedPiece): number {
   const { shape } = piece.definition
-  if (shape.kind === 'corner') return 1
+  if (shape.kind === 'corner' || cornerLayOf(piece.definition, piece.entry)) return 1
   if (shape.kind === 'curve') return curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 1 : -1
   if (shape.kind === 'half-curve') return curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 2 : -2
   if (shape.kind === 'segment') return ((curveLayOf(shape.back, piece.entry.flipped) === 'outside' ? 1 : -1) * shape.angleDegrees) / 90

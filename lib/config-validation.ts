@@ -97,6 +97,7 @@ const PRESET_PROBLEM_WORDING: Record<NonNullable<ReturnType<typeof findChainProb
   'layout-is-closed': 'it carries on after it has joined up all the way round',
   'cannot-flip': 'it lays a unit the other way round that only goes one way',
   'cannot-turn': 'it turns a unit that has a back',
+  'cannot-corner': 'it lays a unit as a corner that is not set to sit in one',
   'piece-closed-on-joining-side': 'a unit is joined on to an arm',
   'neighbours-cannot-join': 'two neighbouring units meet arm to seat',
   'front-units-not-offered': 'it stands a unit in front of another, which this range is not set to allow',

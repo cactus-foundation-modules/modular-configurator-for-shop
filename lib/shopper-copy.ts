@@ -14,6 +14,8 @@ export function refusalSentence(refusal: EditRefusal, maxPieces: number): string
       return 'Only a curved or wedge-shaped unit with no back can be turned the other way round.'
     case 'cannot-turn':
       return 'Only a unit with no back can be turned.'
+    case 'cannot-corner':
+      return 'Only a table made to sit in a corner can have a row go off round it.'
     case 'piece-closed-on-joining-side':
       return 'Its arm would face into the layout. Try it on the other end.'
     case 'would-overlap':
@@ -41,6 +43,8 @@ export function refusalHint(refusal: EditRefusal, maxPieces: number): string {
       return 'Only a curve or wedge with no back turns round'
     case 'cannot-turn':
       return 'Only a unit with no back turns'
+    case 'cannot-corner':
+      return 'That end cannot turn a corner'
     case 'piece-closed-on-joining-side':
       return 'Its arm would face into the layout'
     case 'would-overlap':

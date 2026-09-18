@@ -65,6 +65,8 @@ export function shapeFromChoice(choice: ShapeChoice, previous?: PieceShapeConfig
   const seatDepthMm =
     previous?.kind === 'curve' || previous?.kind === 'half-curve' ? previous.seatDepthMm : DEFAULT_CURVE_SEAT_DEPTH_MM
   const angleDegrees = previous?.kind === 'segment' ? previous.angleDegrees : DEFAULT_SEGMENT_ANGLE_DEGREES
+  // A seat's cushion overhang stays put while its arms are changed.
+  const overhang = previous?.kind === 'straight' && previous.backless !== true && previous.overhangMm ? { overhangMm: previous.overhangMm } : {}
   const segment = (back: 'outside' | 'inside' | 'none', closedLeft: boolean, closedRight: boolean): PieceShapeConfig => ({
     kind: 'segment',
     back,
@@ -74,15 +76,15 @@ export function shapeFromChoice(choice: ShapeChoice, previous?: PieceShapeConfig
   })
   switch (choice) {
     case 'middle':
-      return { kind: 'straight', closedLeft: false, closedRight: false }
+      return { kind: 'straight', closedLeft: false, closedRight: false, ...overhang }
     case 'middle-backless':
       return { kind: 'straight', closedLeft: false, closedRight: false, backless: true }
     case 'left-end':
-      return { kind: 'straight', closedLeft: true, closedRight: false }
+      return { kind: 'straight', closedLeft: true, closedRight: false, ...overhang }
     case 'right-end':
-      return { kind: 'straight', closedLeft: false, closedRight: true }
+      return { kind: 'straight', closedLeft: false, closedRight: true, ...overhang }
     case 'standalone':
-      return { kind: 'straight', closedLeft: true, closedRight: true }
+      return { kind: 'straight', closedLeft: true, closedRight: true, ...overhang }
     case 'corner-back-left':
       return { kind: 'corner', backSide: 'left' }
     case 'corner-back-right':

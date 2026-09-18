@@ -23,6 +23,7 @@ export function presetLayoutUnits(
       ...(frontPieceId ? { frontPieceId } : {}),
       ...(unit.turned ? { turned: true } : {}),
       ...(unit.flipped ? { flipped: true } : {}),
+      ...(unit.cornered ? { cornered: unit.cornered } : {}),
     })
   }
   return specs

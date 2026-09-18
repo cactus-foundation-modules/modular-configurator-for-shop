@@ -8,7 +8,7 @@
 // saves it. With none written, the storefront suggests its own and those are
 // drawn here too, so the owner knows what shoppers will be offered.
 import { chainFromUnits, findChainProblem, type LayoutUnitSpec } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import { canBeFrontSpur, canBeTurned, canHostFrontSpur, isReversible, placeLayout, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { canBeFrontSpur, canBeTurned, canHostFrontSpur, canTurnCorner, isReversible, placeLayout, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import {
   presetUnitsOf,
   presetWithUnits,
@@ -127,7 +127,10 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, fron
           const canHaveFront = definition !== undefined && canHostFrontSpur(definition) && frontSlugs.length > 0
           const canTurn = turnOfferedAt(units, position, definitions)
           const canFlip = definition !== undefined && isReversible(definition)
-          return canHaveFront || canTurn || canFlip ? [{ unit, position, canHaveFront, canTurn, canFlip }] : []
+          // A table can only be the crook of an L with a row either side of it.
+          const inRow = position > 0 && position < units.length - 1
+          const canCorner = unit.cornered !== undefined || (definition !== undefined && canTurnCorner(definition) && inRow)
+          return canHaveFront || canTurn || canFlip || canCorner ? [{ unit, position, canHaveFront, canTurn, canFlip, canCorner }] : []
         })
         return (
         <div
@@ -175,8 +178,8 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, fron
             </div>
             {extras.length > 0 ? (
               <div style={{ display: 'grid', gap: '0.375rem' }}>
-                <span style={labelStyle}>In front, turned and laid the other way</span>
-                {extras.map(({ unit, position, canHaveFront, canTurn, canFlip }) => (
+                <span style={labelStyle}>In front, turned, laid the other way and corners</span>
+                {extras.map(({ unit, position, canHaveFront, canTurn, canFlip, canCorner }) => (
                   <div key={`${unit.valueSlug}-${position}`} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={hintStyle}>
                       {position + 1}. {labelFor(unit.valueSlug)}
@@ -207,6 +210,22 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, fron
                         <input type="checkbox" checked={unit.flipped === true} onChange={(event) => setUnit(position, { ...unit, flipped: event.target.checked })} />
                         Bends the other way
                       </label>
+                    ) : null}
+                    {canCorner ? (
+                      <select
+                        style={fieldStyle}
+                        value={unit.cornered ?? ''}
+                        aria-label={`Whether unit ${position + 1}, ${labelFor(unit.valueSlug)}, sits in a corner`}
+                        onChange={(event) => {
+                          const { cornered: _was, ...rest } = unit
+                          const value = event.target.value
+                          setUnit(position, value === 'left' || value === 'right' ? { ...rest, cornered: value } : rest)
+                        }}
+                      >
+                        <option value="">Carries the row straight on</option>
+                        <option value="right">In a corner - the next row goes off its front</option>
+                        <option value="left">In a corner - the row before comes off its front</option>
+                      </select>
                     ) : null}
                   </div>
                 ))}
