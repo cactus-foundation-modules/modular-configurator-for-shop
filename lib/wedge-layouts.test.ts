@@ -115,6 +115,21 @@ describe('a wedge with its back on the wide side', () => {
     expect(offLine(lastArm[2])).toBeLessThan(0.5)
   })
 
+  it('draws the space at an arm end past the arm, not on top of it', () => {
+    const placed = placeChain(chainOf('in-left', ...repeat('in', 4), 'in-right'), DEFINITIONS)
+    for (const end of ['start', 'end'] as const) {
+      const space = candidatesAtEnd(placed, end, ALL, LIMITS).find((candidate) => candidate.refusal === null)?.space
+      if (!space) throw new Error(`nothing offered at the ${end}`)
+      // The space is the arm wedge where it moves to: its own shape, clear of every unit there now.
+      const arm = pieceAt(placed, end === 'start' ? 0 : 5)
+      expect(space.outline).toHaveLength(floorBoundary(arm.definition, arm.pose).length)
+      for (const piece of placed) {
+        const clear = space.outline.every((corner) => !pointInside(corner, floorBoundary(piece.definition, piece.pose, piece.entry.flipped)))
+        expect(clear).toBe(true)
+      }
+    }
+  })
+
   it('refuses anything joining on through an arm', () => {
     expect(findChainProblem(chainOf('in', 'in-left'), DEFINITIONS, LIMITS)).toBe('neighbours-cannot-join')
     expect(findChainProblem(chainOf('in-right', 'in'), DEFINITIONS, LIMITS)).toBe('neighbours-cannot-join')
@@ -303,3 +318,21 @@ describe('working out which way a wedge model faces', () => {
     expect(orientModel(grid, IN, false).quarterTurns).toBe(2)
   })
 })
+
+/** Strictly inside a convex outline, a millimetre clear of its edges. */
+function pointInside(point: { x: number; z: number }, outline: readonly { x: number; z: number }[]): boolean {
+  let sign = 0
+  for (let index = 0; index < outline.length; index += 1) {
+    const start = outline[index]
+    const end = outline[(index + 1) % outline.length]
+    if (!start || !end) continue
+    const length = Math.hypot(end.x - start.x, end.z - start.z)
+    if (length === 0) continue
+    const side = ((end.x - start.x) * (point.z - start.z) - (end.z - start.z) * (point.x - start.x)) / length
+    if (Math.abs(side) < 1) return false
+    const now = Math.sign(side)
+    if (sign !== 0 && now !== sign) return false
+    sign = now
+  }
+  return true
+}

@@ -13,6 +13,7 @@ import {
   canBeFrontSpur,
   canBeTurned,
   canHostFrontSpur,
+  floorBoundary,
   footprintAt,
   isReversible,
   layoutIsClosed,
@@ -29,6 +30,7 @@ import {
   type PiecePose,
   type PlacedPiece,
   type FloorRectangle,
+  type FloorVector,
 } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 
 /** Why an edit was refused. Each maps to one sentence in the UI. */
@@ -66,6 +68,12 @@ export interface EndCandidate {
   footprint: FloorRectangle
   /** Laid the other way round to fit (a curve or wedge with no back), so its outline is drawn that way. */
   flipped: boolean
+  /**
+   * The new floor the layout grows into, drawn as the dashed space. Where the
+   * unit itself lands, except at an arm end: there the new unit takes the arm
+   * unit's place and the arm unit moves out, so the space is where the arm goes.
+   */
+  space: { outline: FloorVector[]; footprint: FloorRectangle }
   refusal: EditRefusal | null
 }
 
@@ -228,12 +236,12 @@ function refusalForAddition(problem: EditRefusal | null): EditRefusal | null {
 const PROBE_ENTRY_ID = 'mcf-probe'
 
 /**
- * Every piece type offered at one end, each with where its space is drawn and
- * why it is refused if it is. Refused pieces stay in the list so the picker can
- * say why, rather than options silently vanishing. The space is where the new
- * unit lands. At a closed arm end that is the space just inside the arm; the
- * arm unit moves out when the shopper picks a unit, but the prompt belongs
- * where the new unit will actually sit.
+ * Every piece type offered at one end, each with where it lands, where its
+ * space is drawn and why it is refused if it is. Refused pieces stay in the list
+ * so the picker can say why, rather than options silently vanishing. At a closed
+ * arm end the new unit lands just inside the arm and the arm unit moves out; the
+ * space is drawn where the arm unit moves to, past the end of the layout, and
+ * not on top of the arm unit the shopper can already see.
  */
 export function candidatesAtEnd(
   placed: readonly PlacedPiece[],
@@ -249,7 +257,8 @@ export function candidatesAtEnd(
   return definitions.map((definition) => {
     if (!plan) {
       const refusal = closed ? 'layout-is-closed' : 'end-is-closed'
-      return { definition, pose: ORIGIN_POSE, footprint: footprintAt(definition, ORIGIN_POSE), flipped: false, refusal }
+      const footprint = footprintAt(definition, ORIGIN_POSE)
+      return { definition, pose: ORIGIN_POSE, footprint, flipped: false, space: { outline: floorBoundary(definition, ORIGIN_POSE), footprint }, refusal }
     }
     const trials = waysToLay({ entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId }, byId).map((probe) => {
       const trialChain = insertedAt(chain, plan.insertAt, probe)
@@ -262,7 +271,12 @@ export function candidatesAtEnd(
     const marker = trialPlaced.find((piece) => piece.entry.entryId === PROBE_ENTRY_ID)
     const pose = marker?.pose ?? ORIGIN_POSE
     const flipped = marker?.entry.flipped === true
-    return { definition, pose, footprint: marker?.footprint ?? footprintAt(definition, pose, flipped), flipped, refusal }
+    const footprint = marker?.footprint ?? footprintAt(definition, pose, flipped)
+    const movedOut = plan.displacedEntryId ? trialPlaced.find((piece) => piece.entry.entryId === plan.displacedEntryId) : undefined
+    const space = movedOut
+      ? { outline: floorBoundary(movedOut.definition, movedOut.pose, movedOut.entry.flipped), footprint: movedOut.footprint }
+      : { outline: floorBoundary(definition, pose, flipped), footprint }
+    return { definition, pose, footprint, flipped, space, refusal }
   })
 }
 
@@ -291,7 +305,14 @@ export function candidatesInFront(
     const spur = { entryId: PROBE_ENTRY_ID, pieceId: definition.pieceId }
     const result = addFrontSpur(chain, hostEntryId, spur, byId, limits)
     const marker = placeFrontSpur(host, spur, definition)
-    return { definition, pose: marker.pose, footprint: marker.footprint, flipped: false, refusal: result.ok ? null : result.refusal }
+    return {
+      definition,
+      pose: marker.pose,
+      footprint: marker.footprint,
+      flipped: false,
+      space: { outline: floorBoundary(definition, marker.pose), footprint: marker.footprint },
+      refusal: result.ok ? null : result.refusal,
+    }
   })
 }
 

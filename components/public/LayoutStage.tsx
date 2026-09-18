@@ -24,6 +24,8 @@ export interface LayoutStageProps {
   ghosts: readonly SceneGhost[]
   selectedEntryId: string | null
   showDimensions: boolean
+  /** False for a view only to look at (full screen): no remove badges, and a tap chooses nothing. */
+  editable: boolean
   widthText: string
   depthText: string
   onSelectUnit: (entryId: string | null) => void
@@ -44,6 +46,7 @@ export function LayoutStage(props: LayoutStageProps) {
     ghosts,
     selectedEntryId,
     showDimensions,
+    editable,
     widthText,
     depthText,
   } = props
@@ -157,6 +160,10 @@ export function LayoutStage(props: LayoutStageProps) {
   useEffect(() => {
     if (status === 'ready') sceneRef.current?.setSelected(selectedEntryId)
   }, [status, selectedEntryId])
+
+  useEffect(() => {
+    if (status === 'ready') sceneRef.current?.setEditable(editable)
+  }, [status, editable])
 
   useEffect(() => {
     if (status === 'ready') sceneRef.current?.setDimensionsVisible(showDimensions)

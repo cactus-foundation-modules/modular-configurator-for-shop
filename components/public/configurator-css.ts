@@ -22,7 +22,15 @@ export const CONFIGURATOR_CSS = `
 .mcf-sticky-view.svr-mstick .mcf-stage-caption{display:none}
 .mcf-stage{position:relative;width:100%;aspect-ratio:4/3;max-height:34rem;border:1px solid var(--color-border);border-radius:var(--radius-lg,12px);background:var(--color-bg-subtle);overflow:hidden}
 .mcf-stage--fill{position:absolute;inset:0;aspect-ratio:auto;max-height:none;border:0;border-radius:0}
-.mcf-stage--fill .mcf-stage-tools{justify-content:flex-end}
+.mcf-stage--fill .mcf-stage-tools,.mcf-stage--expanded .mcf-stage-tools{justify-content:flex-end}
+.mcf-stage-slot,.mcf-stage-host{display:contents}
+.mcf-expand-backdrop{position:fixed;inset:0;z-index:2147482100;background:var(--color-bg)}
+.mcf-stage--expanded{position:absolute;inset:0;width:100%;height:100dvh;aspect-ratio:auto;max-height:none;border:0;border-radius:0}
+.mcf-stage--expanded .mcf-stage-tools{top:1rem;right:1rem;left:1rem}
+.mcf-stage--expanded .mcf-stage-caption{left:1rem;bottom:1rem}
+.mcf-stage-round{display:inline-grid;place-items:center;flex:none;width:2.25rem;height:2.25rem;margin-left:.25rem;padding:0;border:1px solid var(--color-border);border-radius:50%;background:var(--color-surface);color:var(--color-text);cursor:pointer;box-shadow:var(--shadow-subtle)}
+.mcf-stage-round:hover{border-color:var(--color-primary);background:var(--color-primary-subtle)}
+.mcf-stage-round:focus-visible{outline:2px solid var(--color-border-focus,var(--color-primary));outline-offset:2px}
 .mcf-thumb-plan{display:block;width:100%;height:100%;padding:4px;box-sizing:border-box;background:var(--color-bg-subtle)}
 .mcf-stage-view{position:absolute;inset:0}
 .mcf-stage-plan{display:grid;place-items:center;padding:3.25rem .75rem 2.75rem}
@@ -179,6 +187,6 @@ export const CONFIGURATOR_CSS = `
   .mcf-button--wide{flex-basis:100%}
 }
 @media (prefers-reduced-motion:no-preference){
-  .mcf-tab,.mcf-preset,.mcf-chip,.mcf-unit-select,.mcf-swatch,.mcf-button,.mcf-picker-option{transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
+  .mcf-tab,.mcf-preset,.mcf-chip,.mcf-stage-round,.mcf-unit-select,.mcf-swatch,.mcf-button,.mcf-picker-option{transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 }
 `

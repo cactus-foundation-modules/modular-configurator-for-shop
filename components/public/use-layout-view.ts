@@ -14,7 +14,6 @@ import {
   type SpaceKey,
 } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import {
-  floorBoundary,
   footprintsOverlap,
   layoutEntriesExpanded,
   layoutPieceCount,
@@ -201,10 +200,10 @@ export function joinableSpaces(view: LayoutView, isEmpty: boolean): PlanGhost[] 
   const drawn: FloorRectangle[] = []
   return view.spaces.flatMap((space) => {
     if (!space.ghost || (space.key === 'start' && isEmpty)) return []
-    const { footprint, definition, pose, flipped } = space.ghost
+    const { footprint, outline } = space.ghost.space
     if (space.key !== 'start' && space.key !== 'end' && drawn.some((other) => footprintsOverlap(other, footprint))) return []
     drawn.push(footprint)
     const label = isEmpty ? 'Add your first unit' : `Add a unit ${space.besideText}`
-    return [{ key: space.key, footprint, outline: floorBoundary(definition, pose, flipped), label }]
+    return [{ key: space.key, footprint, outline, label }]
   })
 }

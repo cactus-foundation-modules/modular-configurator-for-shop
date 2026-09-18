@@ -14,6 +14,7 @@ import {
   curveLayOf,
   halfCurveCentre,
   layoutBounds,
+  outlineMiddle,
   pointOnPiece,
   segmentCorners,
   segmentInset,
@@ -311,7 +312,7 @@ function PlanUnit({ piece, number, label, fontSize, interactive, selected, onSel
     </>
   )
 
-  if (!interactive) return <g>{body}</g>
+  if (!interactive || !onSelect) return <g>{body}</g>
   return (
     <g
       className="mcf-plan-hit"
@@ -342,6 +343,8 @@ function PlanGhostSpace({ ghost, fontSize, onAdd }: { ghost: PlanGhost; fontSize
   // Square to the room it is the rounded rectangle it always was; turned by a
   // wedge, or wedge-shaped itself, it is drawn as the unit would really sit.
   const square = isFootprintRectangle(outline, footprint)
+  // On the shape itself: a turned wedge's box has its middle off to one side.
+  const middle = outlineMiddle(outline)
   return (
     <g
       className="mcf-plan-hit"
@@ -365,8 +368,8 @@ function PlanGhostSpace({ ghost, fontSize, onAdd }: { ghost: PlanGhost; fontSize
       )}
       <text
         className="mcf-plan-ghost-plus"
-        x={(footprint.minX + footprint.maxX) / 2}
-        y={(footprint.minZ + footprint.maxZ) / 2}
+        x={middle.x}
+        y={middle.z}
         style={{ fontSize }}
       >
         +

@@ -7,7 +7,7 @@ import {
   replaceEntry,
   swapOptions,
 } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import { placeChain, type ChainEntry, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { footprintsOverlap, placeChain, type ChainEntry, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 
 const LEFT_END: PieceDefinition = { pieceId: 'left', shape: { kind: 'straight', closedLeft: true, closedRight: false }, widthMm: 790, depthMm: 760 }
 const CENTRAL: PieceDefinition = { pieceId: 'central', shape: { kind: 'straight', closedLeft: false, closedRight: false }, widthMm: 660, depthMm: 760 }
@@ -53,15 +53,21 @@ describe('what can be added where', () => {
       right: 'piece-closed-on-joining-side',
       corner: null,
     })
-    // The space is drawn where the new unit will sit, just inside the arm unit.
-    const centralSpace = atEnd.find((c) => c.definition.pieceId === 'central')?.footprint
+    // The new unit lands just inside the arm unit, and the arm unit moves out.
+    const central = atEnd.find((c) => c.definition.pieceId === 'central')
     const armUnit = placed[2]
-    expect(centralSpace?.minX).toBe(armUnit?.footprint.minX)
+    expect(central?.footprint.minX).toBe(armUnit?.footprint.minX)
+    // The space is drawn where the arm unit moves to, clear of the layout as it stands.
+    expect(central?.space.footprint.minX).toBe((armUnit?.footprint.minX ?? 0) + CENTRAL.widthMm)
+    expect(central?.space.footprint.maxX).toBe((armUnit?.footprint.maxX ?? 0) + CENTRAL.widthMm)
 
     const atStart = candidatesAtEnd(placed, 'start', ALL, LIMITS)
-    const cornerSpace = atStart.find((c) => c.definition.pieceId === 'corner')?.footprint
+    const corner = atStart.find((c) => c.definition.pieceId === 'corner')
     const leftArm = placed[0]
-    expect(cornerSpace?.maxX).toBe(leftArm?.footprint.maxX)
+    expect(corner?.footprint.maxX).toBe(leftArm?.footprint.maxX)
+    const cornerSpace = corner?.space.footprint
+    if (!cornerSpace) throw new Error('no space at the start')
+    expect(placed.some((piece) => footprintsOverlap(piece.footprint, cornerSpace))).toBe(false)
 
     const grown = addAtEnd(sofa, 'end', { entryId: 'n', pieceId: 'central' }, DEFINITIONS, LIMITS)
     expect(grown.ok && grown.chain.map((entry) => entry.pieceId)).toEqual(['left', 'central', 'central', 'right'])

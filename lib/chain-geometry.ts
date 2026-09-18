@@ -759,6 +759,15 @@ export function layoutBounds(placed: readonly PlacedPiece[]): FloorRectangle | n
   }
 }
 
+/** The middle of a floor outline (the average of its corners), where a label on it sits. */
+export function outlineMiddle(outline: readonly FloorVector[]): FloorVector {
+  if (outline.length === 0) return { x: 0, z: 0 }
+  return {
+    x: outline.reduce((sum, corner) => sum + corner.x, 0) / outline.length,
+    z: outline.reduce((sum, corner) => sum + corner.z, 0) / outline.length,
+  }
+}
+
 /** A point given in a piece's own frame, on the floor. */
 export function pointOnPiece(pose: PiecePose, local: FloorVector): FloorVector {
   const rotated = rotateOnFloor(local, pose.rotationY)

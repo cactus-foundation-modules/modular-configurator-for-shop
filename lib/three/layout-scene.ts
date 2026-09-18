@@ -28,7 +28,7 @@ import type {
 } from 'three'
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { addLights, disposeRenderer, warmKtx2Support } from '@/modules/product-3d-views-for-shop/lib/three/load-model'
-import type { FloorRectangle, FloorVector, PiecePose } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { outlineMiddle, type FloorRectangle, type FloorVector, type PiecePose } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { isSpaceKey, type SpaceKey } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
 import type { StorefrontViewerLook } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 import type { BuiltUnitModel } from '@/modules/modular-configurator-for-shop/lib/three/unit-model'
@@ -108,6 +108,8 @@ const REMOVE_BADGE_HEIGHT = 0.48
 /** Where the remove badge moves to when a "+" is drawn over the same unit: up and towards its back. */
 const REMOVE_BADGE_CLEAR_HEIGHT = 0.86
 const REMOVE_BADGE_CLEAR_BACK_SHARE = 0.3
+/** How faint a "+" is drawn while a unit stands between it and the camera. */
+const PLUS_BEHIND_OPACITY = 0.3
 
 function toMetres(millimetres: number): number {
   return millimetres / MILLIMETRES_PER_METRE
@@ -137,10 +139,18 @@ export class LayoutScene {
   private needsRender = true
   private disposed = false
   private pointerDown: { x: number; y: number } | null = null
-  private hoverRemoveBadge: Sprite | null = null
+  /** The one remove badge, made on first use and moved from unit to unit. */
+  private removeBadge: Sprite | null = null
+  /** The unit the badge is on: the hovered one, else the selected one (which is how a touch screen, with no hover, gets it). */
+  private badgeEntryId: string | null = null
   private hoveredEntryId: string | null = null
-  private ghostFootprints: FloorRectangle[] = []
+  /** Where each ghost's "+" sits on the floor, in millimetres. */
+  private ghostPluses: FloorVector[] = []
+  /** The ghosts' "+" sprites, checked each frame for a unit standing between them and the camera. */
+  private plusSprites: Sprite[] = []
   private readonly removeListeners: Array<() => void> = []
+  /** False for a view that is only looked at: no remove badges, and taps choose nothing. */
+  private editable = true
 
   private constructor(
     private readonly three: ThreeModule,
@@ -244,8 +254,9 @@ export class LayoutScene {
 
   setGhosts(ghosts: readonly SceneGhost[]): void {
     this.clearGroup(this.ghostGroup)
+    this.plusSprites = []
     for (const ghost of ghosts) this.ghostGroup.add(this.buildGhost(ghost))
-    this.ghostFootprints = ghosts.map((ghost) => ghost.footprint)
+    this.ghostPluses = ghosts.map((ghost) => outlineMiddle(ghost.outline))
     this.placeRemoveBadge()
     this.needsRender = true
   }
@@ -253,6 +264,7 @@ export class LayoutScene {
   setSelected(entryId: string | null): void {
     this.selectedEntryId = entryId
     this.rebuildSelection()
+    this.refreshRemoveBadge()
     this.needsRender = true
   }
 
@@ -264,12 +276,19 @@ export class LayoutScene {
     this.needsRender = true
   }
 
+  setEditable(editable: boolean): void {
+    this.editable = editable
+    if (!editable) this.hoveredEntryId = null
+    this.refreshRemoveBadge()
+  }
+
   resize(width: number, height: number): void {
     if (width <= 0 || height <= 0) return
     this.renderer.setSize(width, height, false)
     this.camera.aspect = width / height
     this.camera.updateProjectionMatrix()
     if (!this.userHasMovedCamera) this.frameLayout(true)
+    else this.backOffToFit()
     this.needsRender = true
   }
 
@@ -282,6 +301,8 @@ export class LayoutScene {
     this.clearGroup(this.ghostGroup)
     this.clearGroup(this.selectionGroup)
     this.clearGroup(this.dimensionGroup)
+    this.removeBadge?.material.map?.dispose()
+    this.removeBadge?.material.dispose()
     this.ground.geometry.dispose()
     this.ground.material.dispose()
     this.controls.dispose()
@@ -311,12 +332,15 @@ export class LayoutScene {
   }
 
   private removeUnit(entryId: string, slot: UnitSlot): void {
-    if (this.hoveredEntryId === entryId) this.setHoveredEntry(null)
+    if (this.hoveredEntryId === entryId) this.hoveredEntryId = null
+    if (this.badgeEntryId === entryId && this.removeBadge) slot.holder.remove(this.removeBadge)
+    if (this.badgeEntryId === entryId) this.badgeEntryId = null
     this.scene.remove(slot.holder)
     slot.built?.dispose()
     slot.built = null
     slot.buildToken += 1
     this.units.delete(entryId)
+    if (!this.disposed) this.refreshRemoveBadge()
   }
 
   private loadUnit(slot: UnitSlot, unit: SceneUnit): void {
@@ -395,12 +419,10 @@ export class LayoutScene {
     group.add(fill, this.floorOutline(ghost.outline, this.theme.accent, true, 0.006))
     const plus = this.plusSprite()
     plus.userData.ghostKey = ghost.key
-    plus.position.set(
-      toMetres((ghost.footprint.minX + ghost.footprint.maxX) / 2),
-      0.45,
-      toMetres((ghost.footprint.minZ + ghost.footprint.maxZ) / 2),
-    )
+    const middle = outlineMiddle(ghost.outline)
+    plus.position.set(toMetres(middle.x), 0.45, toMetres(middle.z))
     group.add(plus)
+    this.plusSprites.push(plus)
     return group
   }
 
@@ -459,44 +481,46 @@ export class LayoutScene {
     return sprite
   }
 
-  /** A remove badge on the hovered unit, parented to its holder so it glides with it. */
   private setHoveredEntry(entryId: string | null): void {
     if (this.hoveredEntryId === entryId) return
-    if (this.hoverRemoveBadge && this.hoveredEntryId) {
-      const previous = this.units.get(this.hoveredEntryId)
-      previous?.holder.remove(this.hoverRemoveBadge)
-    }
     this.hoveredEntryId = entryId
-    if (!entryId) {
-      this.hoverRemoveBadge = null
-      this.needsRender = true
-      return
+    this.refreshRemoveBadge()
+  }
+
+  /**
+   * Puts the remove badge on the hovered unit, else on the selected one: a mouse
+   * sees it wherever it points, and a touch screen, which has no hover, sees it
+   * on the unit just tapped. None in a view that is only looked at. Parented to
+   * the unit's holder so it glides with it.
+   */
+  private refreshRemoveBadge(): void {
+    const wanted = this.editable ? (this.hoveredEntryId ?? this.selectedEntryId) : null
+    const target = wanted && this.units.has(wanted) ? wanted : null
+    if (this.badgeEntryId !== target) {
+      if (this.removeBadge && this.badgeEntryId) this.units.get(this.badgeEntryId)?.holder.remove(this.removeBadge)
+      this.badgeEntryId = target
+      const slot = target ? this.units.get(target) : undefined
+      if (slot) {
+        if (!this.removeBadge) this.removeBadge = this.removeSprite()
+        this.removeBadge.userData.removeEntryId = target
+        slot.holder.add(this.removeBadge)
+      }
     }
-    const slot = this.units.get(entryId)
-    if (!slot) return
-    if (!this.hoverRemoveBadge) this.hoverRemoveBadge = this.removeSprite()
-    this.hoverRemoveBadge.userData.removeEntryId = entryId
-    slot.holder.add(this.hoverRemoveBadge)
     this.placeRemoveBadge()
     this.needsRender = true
   }
 
   /**
-   * Puts the remove badge over the middle of the hovered unit - unless a "+" is
-   * drawn over that unit too (the space inside an arm unit, where a new unit
-   * pushes the arm out), in which case the badge moves up and back so the two
-   * never sit on top of each other.
+   * Puts the remove badge over the middle of its unit - unless a "+" is
+   * drawn over that unit too, in which case the badge moves up and back so the
+   * two never sit on top of each other.
    */
   private placeRemoveBadge(): void {
-    const badge = this.hoverRemoveBadge
-    const slot = this.hoveredEntryId ? this.units.get(this.hoveredEntryId) : undefined
+    const badge = this.removeBadge
+    const slot = this.badgeEntryId ? this.units.get(this.badgeEntryId) : undefined
     if (!badge || !slot) return
     const { footprint } = slot
-    const plusOverUnit = this.ghostFootprints.some((ghost) => {
-      const x = (ghost.minX + ghost.maxX) / 2
-      const z = (ghost.minZ + ghost.maxZ) / 2
-      return x > footprint.minX && x < footprint.maxX && z > footprint.minZ && z < footprint.maxZ
-    })
+    const plusOverUnit = this.ghostPluses.some(({ x, z }) => x > footprint.minX && x < footprint.maxX && z > footprint.minZ && z < footprint.maxZ)
     if (!plusOverUnit) {
       badge.position.set(0, REMOVE_BADGE_HEIGHT, 0)
       return
@@ -617,14 +641,36 @@ export class LayoutScene {
   }
 
   /** Eases the camera round to show the whole layout, keeping the shopper's own angle once they have turned it. */
-  private frameLayout(immediate = false): void {
-    const bounds = this.bounds ?? { minX: -400, maxX: 400, minZ: -400, maxZ: 400 }
+  /** How far back the camera must be for the whole layout to fit the view at its current shape. */
+  private fitDistance(bounds: FloorRectangle): { radius: number; distance: number } {
     const width = toMetres(bounds.maxX - bounds.minX)
     const depth = toMetres(bounds.maxZ - bounds.minZ)
     const radius = Math.max(0.7, Math.hypot(width / 2, depth / 2, 0.45))
     const verticalHalf = (FIELD_OF_VIEW * Math.PI) / 360
     const horizontalHalf = Math.atan(Math.tan(verticalHalf) * Math.max(this.camera.aspect, 0.1))
-    const distance = (radius / Math.sin(Math.min(verticalHalf, horizontalHalf))) * 1.05
+    return { radius, distance: (radius / Math.sin(Math.min(verticalHalf, horizontalHalf))) * 1.05 }
+  }
+
+  /**
+   * After a resize of a view the shopper has turned: their angle and zoom stay,
+   * but where the view is now too narrow for the layout (full screen on an
+   * upright phone, say) the camera steps back just far enough to fit it. Never
+   * closer - that would undo a zoom out they chose.
+   */
+  private backOffToFit(): void {
+    if (!this.bounds) return
+    const { distance } = this.fitDistance(this.bounds)
+    this.controls.maxDistance = Math.max(this.controls.maxDistance, distance * 3)
+    const current = this.currentSpherical()
+    if (current.distance >= distance) return
+    const { target } = this.controls
+    this.placeCamera(target.x, target.y, target.z, distance, current.polar, current.azimuth)
+    this.cameraGoal = null
+  }
+
+  private frameLayout(immediate = false): void {
+    const bounds = this.bounds ?? { minX: -400, maxX: 400, minZ: -400, maxZ: 400 }
+    const { radius, distance } = this.fitDistance(bounds)
     this.controls.minDistance = radius * 0.5
     this.controls.maxDistance = distance * 3
     const goal: CameraGoal = {
@@ -643,6 +689,30 @@ export class LayoutScene {
       this.cameraGoal = goal
     }
     this.needsRender = true
+  }
+
+  /**
+   * A "+" is drawn over everything so it is never lost inside a model, which from
+   * a low angle put the "+" of a space behind the layout on top of a unit in
+   * front of it - and, winning every tap, took the taps meant for that unit.
+   * One behind a unit is faded and gives the tap to the unit (see hitAt).
+   */
+  private shadeHiddenPluses(): void {
+    if (this.plusSprites.length === 0) return
+    const { three } = this
+    const holders = [...this.units.values()].map((slot) => slot.holder)
+    const raycaster = new three.Raycaster()
+    const from = this.camera.position
+    for (const plus of this.plusSprites) {
+      const towards = plus.getWorldPosition(new three.Vector3()).sub(from)
+      const distance = towards.length()
+      raycaster.set(from, towards.normalize())
+      raycaster.far = distance
+      const blocker = raycaster.intersectObjects(holders, true).find((hit) => !(hit.object as Partial<Sprite>).isSprite && !(hit.object as Partial<Line>).isLine)
+      const behind = blocker !== undefined && blocker.distance < distance - 0.05
+      plus.userData.behindUnit = behind
+      plus.material.opacity = behind ? PLUS_BEHIND_OPACITY : 1
+    }
   }
 
   private currentSpherical(): { distance: number; polar: number; azimuth: number } {
@@ -688,6 +758,7 @@ export class LayoutScene {
       moved = this.controls.update() || moved
       if (moved || this.needsRender) {
         this.positionDimensionLabels()
+        this.shadeHiddenPluses()
         this.renderer.render(this.scene, this.camera)
         this.needsRender = false
       }
@@ -746,11 +817,11 @@ export class LayoutScene {
     const onPointerUp = (event: PointerEvent) => {
       const start = this.pointerDown
       this.pointerDown = null
-      if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return
+      if (!this.editable || !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return
       this.pick(event)
     }
     const onPointerMove = (event: PointerEvent) => {
-      if (this.pointerDown) return
+      if (this.pointerDown || !this.editable) return
       const hit = this.hitAt(event)
       if (hit && 'removeEntryId' in hit) {
         this.canvas.style.cursor = 'pointer'
@@ -799,9 +870,12 @@ export class LayoutScene {
       .intersectObjects([...this.ghostGroup.children, ...holders], true)
       .filter((hit) => !(hit.object as Partial<Line>).isLine)
     // The "+" badge is drawn over everything, the remove badge included, so a tap
-    // on it is a tap on it even where a unit or its remove badge sits behind;
-    // then the remove badge; otherwise the nearest thing under the pointer wins.
-    const badge = hits.find((hit) => (hit.object as Partial<Sprite>).isSprite && findUserData(hit.object, 'ghostKey'))
+    // on it is a tap on it even where a unit or its remove badge sits behind -
+    // unless it is faded behind a unit standing in front of it, when the unit
+    // wins; then the remove badge; otherwise the nearest thing under the pointer wins.
+    const badge = hits.find(
+      (hit) => (hit.object as Partial<Sprite>).isSprite && findUserData(hit.object, 'ghostKey') && hit.object.userData.behindUnit !== true,
+    )
     const removeEntryId = badge ? null : hits.map((candidate) => findUserData(candidate.object, 'removeEntryId')).find((id) => typeof id === 'string')
     if (typeof removeEntryId === 'string') return { removeEntryId }
     const hit = badge ?? hits[0]
