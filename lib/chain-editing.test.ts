@@ -57,9 +57,15 @@ describe('what can be added where', () => {
     const central = atEnd.find((c) => c.definition.pieceId === 'central')
     const armUnit = placed[2]
     expect(central?.footprint.minX).toBe(armUnit?.footprint.minX)
-    // The space is drawn where the arm unit moves to, clear of the layout as it stands.
-    expect(central?.space.footprint.minX).toBe((armUnit?.footprint.minX ?? 0) + CENTRAL.widthMm)
-    expect(central?.space.footprint.maxX).toBe((armUnit?.footprint.maxX ?? 0) + CENTRAL.widthMm)
+    // The space is a plain square flush against the arm unit's outer side, the
+    // same whichever unit is picked - no guess at the next unit's shape.
+    expect(central?.space.footprint).toEqual({
+      minX: armUnit?.footprint.maxX,
+      maxX: (armUnit?.footprint.maxX ?? 0) + RIGHT_END.depthMm,
+      minZ: armUnit?.footprint.minZ,
+      maxZ: armUnit?.footprint.maxZ,
+    })
+    expect(atEnd.find((c) => c.definition.pieceId === 'corner')?.space).toEqual(central?.space)
 
     const atStart = candidatesAtEnd(placed, 'start', ALL, LIMITS)
     const corner = atStart.find((c) => c.definition.pieceId === 'corner')

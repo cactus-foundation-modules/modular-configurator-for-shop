@@ -759,6 +759,39 @@ export function layoutBounds(placed: readonly PlacedPiece[]): FloorRectangle | n
   }
 }
 
+/**
+ * The open space at one end of a layout, drawn where a unit can be added: a plain
+ * square standing flush against the end piece's outer face, turned to face out
+ * from it, its side the length of that face. It makes no guess at the shape of
+ * whatever the shopper will choose - only where the layout carries on from.
+ * `end` is the chain's last piece (its exit face) or first (its entry face).
+ */
+export function endSpaceOutline(piece: PlacedPiece, end: ChainEnd): FloorVector[] {
+  const local = end === 'end' ? exitFaceOf(piece.definition, piece.entry) : entryFaceOf(piece.definition, piece.entry)
+  const face = transformFace(local, piece.pose)
+  // The face runs from its back corner towards the front for as long as the
+  // piece's own outline stays on it.
+  const along = floorBoundary(piece.definition, piece.pose, piece.entry.flipped)
+    .filter((corner) => Math.abs((corner.x - face.backCorner.x) * face.outward.x + (corner.z - face.backCorner.z) * face.outward.z) < 1)
+    .map((corner) => (corner.x - face.backCorner.x) * face.towardsFront.x + (corner.z - face.backCorner.z) * face.towardsFront.z)
+  const length = Math.max(...along, 0) || piece.definition.depthMm
+  const at = (forward: number, out: number): FloorVector => ({
+    x: roundMillimetre(face.backCorner.x + face.towardsFront.x * forward + face.outward.x * out),
+    z: roundMillimetre(face.backCorner.z + face.towardsFront.z * forward + face.outward.z * out),
+  })
+  return [at(0, 0), at(length, 0), at(length, length), at(0, length)]
+}
+
+/** The floor rectangle round an outline. */
+export function boundsOfOutline(outline: readonly FloorVector[]): FloorRectangle {
+  return {
+    minX: Math.min(...outline.map((corner) => corner.x)),
+    maxX: Math.max(...outline.map((corner) => corner.x)),
+    minZ: Math.min(...outline.map((corner) => corner.z)),
+    maxZ: Math.max(...outline.map((corner) => corner.z)),
+  }
+}
+
 /** The middle of a floor outline (the average of its corners), where a label on it sits. */
 export function outlineMiddle(outline: readonly FloorVector[]): FloorVector {
   if (outline.length === 0) return { x: 0, z: 0 }

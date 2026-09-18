@@ -115,14 +115,21 @@ describe('a wedge with its back on the wide side', () => {
     expect(offLine(lastArm[2])).toBeLessThan(0.5)
   })
 
-  it('draws the space at an arm end past the arm, not on top of it', () => {
-    const placed = placeChain(chainOf('in-left', ...repeat('in', 4), 'in-right'), DEFINITIONS)
+  it.each([
+    ['a horseshoe', chainOf('in-left', ...repeat('in', 4), 'in-right')],
+    ['a serpentine', chainOf('in-left', 'in', 'in', 'out', 'out', 'out-right')],
+  ])('draws the space at an arm end of %s past the arm, not on top of it', (_name, chain) => {
+    expect(findChainProblem(chain, DEFINITIONS, LIMITS)).toBeNull()
+    const placed = placeChain(chain, DEFINITIONS)
     for (const end of ['start', 'end'] as const) {
       const space = candidatesAtEnd(placed, end, ALL, LIMITS).find((candidate) => candidate.refusal === null)?.space
       if (!space) throw new Error(`nothing offered at the ${end}`)
-      // The space is the arm wedge where it moves to: its own shape, clear of every unit there now.
+      // A plain square against the arm wedge's outer side, clear of every unit there now.
+      expect(space.outline).toHaveLength(4)
       const arm = pieceAt(placed, end === 'start' ? 0 : 5)
-      expect(space.outline).toHaveLength(floorBoundary(arm.definition, arm.pose).length)
+      const armCorners = floorBoundary(arm.definition, arm.pose)
+      const touching = space.outline.filter((corner) => armCorners.some((other) => Math.hypot(other.x - corner.x, other.z - corner.z) < 1))
+      expect(touching).toHaveLength(2)
       for (const piece of placed) {
         const clear = space.outline.every((corner) => !pointInside(corner, floorBoundary(piece.definition, piece.pose, piece.entry.flipped)))
         expect(clear).toBe(true)

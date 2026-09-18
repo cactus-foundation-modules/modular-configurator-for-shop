@@ -702,6 +702,10 @@ export class LayoutScene {
     const { three } = this
     const holders = [...this.units.values()].map((slot) => slot.holder)
     const raycaster = new three.Raycaster()
+    // A unit's remove badge is a Sprite, and three cannot test a ray against a
+    // Sprite without the camera - it throws, and a throw here stopped the frame
+    // loop dead: the whole view froze the moment a unit was hovered or chosen.
+    raycaster.camera = this.camera
     const from = this.camera.position
     for (const plus of this.plusSprites) {
       const towards = plus.getWorldPosition(new three.Vector3()).sub(from)
@@ -750,6 +754,8 @@ export class LayoutScene {
   private startLoop(): void {
     const tick = (time: number) => {
       if (this.disposed) return
+      // Asked for first, so one bad frame cannot stop every frame after it.
+      this.frameHandle = requestAnimationFrame(tick)
       const seconds = this.lastFrameTime ? Math.min((time - this.lastFrameTime) / 1000, 0.1) : 0.016
       this.lastFrameTime = time
       const ease = 1 - Math.exp(-EASE_RATE * seconds)
@@ -762,7 +768,6 @@ export class LayoutScene {
         this.renderer.render(this.scene, this.camera)
         this.needsRender = false
       }
-      this.frameHandle = requestAnimationFrame(tick)
     }
     this.frameHandle = requestAnimationFrame(tick)
   }

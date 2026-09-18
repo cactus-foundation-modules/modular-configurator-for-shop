@@ -12,7 +12,9 @@ import {
   anchorLayout,
   canBeFrontSpur,
   canBeTurned,
+  boundsOfOutline,
   canHostFrontSpur,
+  endSpaceOutline,
   floorBoundary,
   footprintAt,
   isReversible,
@@ -69,9 +71,9 @@ export interface EndCandidate {
   /** Laid the other way round to fit (a curve or wedge with no back), so its outline is drawn that way. */
   flipped: boolean
   /**
-   * The new floor the layout grows into, drawn as the dashed space. Where the
-   * unit itself lands, except at an arm end: there the new unit takes the arm
-   * unit's place and the arm unit moves out, so the space is where the arm goes.
+   * The dashed space drawn for this end: a plain square against the end piece's
+   * outer face (see endSpaceOutline), the same whichever unit is picked. On an
+   * empty layout, the first unit where it would stand.
    */
   space: { outline: FloorVector[]; footprint: FloorRectangle }
   refusal: EditRefusal | null
@@ -236,12 +238,12 @@ function refusalForAddition(problem: EditRefusal | null): EditRefusal | null {
 const PROBE_ENTRY_ID = 'mcf-probe'
 
 /**
- * Every piece type offered at one end, each with where it lands, where its
+ * Every piece type offered at one end, each with where it lands, where the end's
  * space is drawn and why it is refused if it is. Refused pieces stay in the list
  * so the picker can say why, rather than options silently vanishing. At a closed
  * arm end the new unit lands just inside the arm and the arm unit moves out; the
- * space is drawn where the arm unit moves to, past the end of the layout, and
- * not on top of the arm unit the shopper can already see.
+ * space is still drawn past the end, against the arm unit's outer side, where
+ * the layout grows.
  */
 export function candidatesAtEnd(
   placed: readonly PlacedPiece[],
@@ -254,6 +256,10 @@ export function candidatesAtEnd(
   const byId = new Map([...placed.map((piece) => piece.definition), ...definitions].map((definition) => [definition.pieceId, definition]))
   const plan = endPlan(chain, end, byId)
   const closed = isClosedChain(chain, byId)
+  const edgeEntry = end === 'end' ? chain[chain.length - 1] : chain[0]
+  const edgePiece = edgeEntry ? placed.find((piece) => piece.entry.entryId === edgeEntry.entryId) : undefined
+  const endOutline = edgePiece ? endSpaceOutline(edgePiece, end) : null
+  const endSpace = endOutline ? { outline: endOutline, footprint: boundsOfOutline(endOutline) } : null
   return definitions.map((definition) => {
     if (!plan) {
       const refusal = closed ? 'layout-is-closed' : 'end-is-closed'
@@ -272,10 +278,7 @@ export function candidatesAtEnd(
     const pose = marker?.pose ?? ORIGIN_POSE
     const flipped = marker?.entry.flipped === true
     const footprint = marker?.footprint ?? footprintAt(definition, pose, flipped)
-    const movedOut = plan.displacedEntryId ? trialPlaced.find((piece) => piece.entry.entryId === plan.displacedEntryId) : undefined
-    const space = movedOut
-      ? { outline: floorBoundary(movedOut.definition, movedOut.pose, movedOut.entry.flipped), footprint: movedOut.footprint }
-      : { outline: floorBoundary(definition, pose, flipped), footprint }
+    const space = endSpace ?? { outline: floorBoundary(definition, pose, flipped), footprint }
     return { definition, pose, footprint, flipped, space, refusal }
   })
 }
