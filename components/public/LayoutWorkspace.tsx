@@ -1,7 +1,8 @@
 'use client'
 
 // The layout builder's controls, laid out down the product page's purchase
-// column: what to add and why not, the units in order and the selected one, the
+// column: what to add and why not, the units in order (a row of pills) with the
+// selected one's panel under them, the
 // layout's own options, and the price with the add button
 // last - the same order, and the same look, as the individual tab's price,
 // delivery box and buy row.
@@ -65,6 +66,8 @@ interface LayoutWorkspaceProps {
 }
 
 const MAX_LAYOUT_QUANTITY = 20
+
+const unitPanelId = (entryId: string) => `mcf-unit-panel-${entryId}`
 
 export function LayoutWorkspace({
   storefront,
@@ -143,6 +146,19 @@ export function LayoutWorkspace({
   const openSpace = pickerSpace ?? (isEmpty ? 'end' : null)
   const pickerView = openSpace ? spaceViewFor(view, openSpace) : null
   const firstProblem = view.price.units.find((unit) => unit.problem !== null)
+
+  // The selected unit's panel sits under the row of units rather than in it, so
+  // what it offers is worked out once, for that unit alone.
+  const selectedIndex = view.price.units.findIndex((unit) => unit.entry.entryId === selectedEntryId)
+  const selectedUnit = selectedIndex >= 0 ? view.price.units[selectedIndex] : undefined
+  const selectedOwn = (selectedUnit && draft.unitChoices[selectedUnit.entry.entryId]) ?? {}
+  const selectedDefinition = selectedUnit ? definitions.get(selectedUnit.entry.pieceId) : undefined
+  const selectedIsFrontSpur = selectedUnit ? hostEntryIdForSpur(draft.chain, selectedUnit.entry.entryId) !== null : false
+  const selectedLabel = selectedUnit ? (view.labels[selectedIndex] ?? labelFor(selectedUnit.entry.pieceId)) : ''
+  const frontSpurChoices =
+    selectedUnit && selectedDefinition && !selectedIsFrontSpur
+      ? frontSpurOptions(draft.chain, selectedUnit.entry.entryId, [...definitions.values()], { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })
+      : []
   const resetButton = (
     <button type="button" className="mcf-reset" onClick={onReset}>
       Reset options
@@ -224,6 +240,8 @@ export function LayoutWorkspace({
           ) : null}
 
         {!isEmpty ? (
+          // The units in order, side by side as pills that wrap; the selected
+          // one opens its panel under the whole row, not inside its own pill.
           <ol className="mcf-units">
             {view.price.units.map((unit, index) => {
               const own = draft.unitChoices[unit.entry.entryId] ?? {}
@@ -234,72 +252,72 @@ export function LayoutWorkspace({
                 const value = differs ? option.values.find((candidate) => candidate.id === unit.selection[option.id]) : undefined
                 return value ? [value.label] : []
               })
-              const definition = definitions.get(unit.entry.pieceId)
               const selected = unit.entry.entryId === selectedEntryId
-              const panelId = `mcf-unit-panel-${unit.entry.entryId}`
-              const spurHostId = hostEntryIdForSpur(draft.chain, unit.entry.entryId)
-              const isFrontSpur = spurHostId !== null
-              const frontSpurChoices =
-                !isFrontSpur && definition
-                  ? frontSpurOptions(draft.chain, unit.entry.entryId, [...definitions.values()], { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })
-                  : []
               return (
-                <li key={unit.entry.entryId} className="mcf-unit" data-selected={selected}>
-                  <span className="mcf-unit-number" aria-hidden="true">
-                    {index + 1}
-                  </span>
+                <li key={unit.entry.entryId} className="mcf-unit" data-selected={selected} data-problem={unit.problem !== null}>
                   <button
                     type="button"
                     className="mcf-unit-select"
                     aria-expanded={selected}
-                    aria-controls={selected ? panelId : undefined}
+                    aria-controls={selected ? unitPanelId(unit.entry.entryId) : undefined}
                     onClick={() => onSelectUnit(selected ? null : unit.entry.entryId)}
                   >
-                    <span className="mcf-unit-name">{view.labels[index]}</span>
-                    {unit.problem ? (
-                      <span className="mcf-unit-detail mcf-unit-detail--problem">{unitProblemSentence(unit.problem)}</span>
-                    ) : ownLabels.length > 0 ? (
-                      <span className="mcf-unit-detail">In {ownLabels.join(', ')}</span>
-                    ) : null}
+                    <span className="mcf-unit-number" aria-hidden="true">
+                      {index + 1}
+                    </span>
+                    <span className="mcf-unit-text">
+                      <span className="mcf-unit-name">{view.labels[index]}</span>
+                      {unit.problem ? (
+                        <span className="mcf-unit-detail mcf-unit-detail--problem">{unitProblemSentence(unit.problem)}</span>
+                      ) : ownLabels.length > 0 ? (
+                        <span className="mcf-unit-detail">In {ownLabels.join(', ')}</span>
+                      ) : null}
+                    </span>
+                    {unit.variant ? <span className="mcf-unit-price">{figure(unit.variant.price)}</span> : null}
                   </button>
-                  <span className="mcf-unit-price">{unit.variant ? figure(unit.variant.price) : ''}</span>
-                  {selected ? (
-                    // The selected unit opens in place, in the list, wherever it was chosen from.
-                    <div id={panelId} className="mcf-unit-body" ref={unitEditorRef}>
-                      <UnitEditor
-                        label={view.labels[index] ?? labelFor(unit.entry.pieceId)}
-                        swapTo={swapOptions(draft.chain, unit.entry.entryId, definitions, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })}
-                        labelFor={labelFor}
-                        otherOptions={otherOptions}
-                        layoutChoices={layoutChoices}
-                        ownChoices={own}
-                        madeIn={unit.selection}
-                        adjustedOptionIds={unit.adjustedOptionIds}
-                        onFlip={definition && isReversible(definition) && !isFrontSpur ? () => dispatch({ type: 'flip', entryId: unit.entry.entryId }) : undefined}
-                        onTurn={
-                          !isFrontSpur && turnIsOffered(draft.chain, unit.entry.entryId, definitions, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })
-                            ? () => dispatch({ type: 'turn', entryId: unit.entry.entryId })
-                            : undefined
-                        }
-                        turned={unit.entry.turned === true}
-                        frontSpurTo={frontSpurChoices}
-                        onAddFrontSpur={
-                          frontSpurChoices.length > 0
-                            ? (pieceId) => dispatch({ type: 'add-front-spur', hostEntryId: unit.entry.entryId, pieceId, select: true })
-                            : undefined
-                        }
-                        isMadeIn={(optionId, valueId) => unitIsMadeIn(payload, storefront.pieceOptionId, unit.entry.pieceId, optionId, valueId, own)}
-                        onSwap={(pieceId) => dispatch({ type: 'swap', entryId: unit.entry.entryId, pieceId })}
-                        onChoose={(optionId, valueId) => dispatch({ type: 'set-unit-choice', entryId: unit.entry.entryId, optionId, valueId })}
-                        onRemove={() => dispatch({ type: 'remove', entryId: unit.entry.entryId })}
-                        onClose={() => onSelectUnit(null)}
-                      />
-                    </div>
-                  ) : null}
                 </li>
               )
             })}
           </ol>
+        ) : null}
+
+        {selectedUnit ? (
+          <div id={unitPanelId(selectedUnit.entry.entryId)} className="mcf-unit-body" ref={unitEditorRef}>
+            <p className="mcf-unit-body-title">
+              <span className="mcf-unit-number" aria-hidden="true">
+                {selectedIndex + 1}
+              </span>
+              {selectedLabel}
+            </p>
+            <UnitEditor
+              label={selectedLabel}
+              swapTo={swapOptions(draft.chain, selectedUnit.entry.entryId, definitions, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })}
+              labelFor={labelFor}
+              otherOptions={otherOptions}
+              layoutChoices={layoutChoices}
+              ownChoices={selectedOwn}
+              madeIn={selectedUnit.selection}
+              adjustedOptionIds={selectedUnit.adjustedOptionIds}
+              onFlip={selectedDefinition && isReversible(selectedDefinition) && !selectedIsFrontSpur ? () => dispatch({ type: 'flip', entryId: selectedUnit.entry.entryId }) : undefined}
+              onTurn={
+                !selectedIsFrontSpur && turnIsOffered(draft.chain, selectedUnit.entry.entryId, definitions, { maxPieces: storefront.maxPieces, frontUnits: storefront.frontUnits })
+                  ? () => dispatch({ type: 'turn', entryId: selectedUnit.entry.entryId })
+                  : undefined
+              }
+              turned={selectedUnit.entry.turned === true}
+              frontSpurTo={frontSpurChoices}
+              onAddFrontSpur={
+                frontSpurChoices.length > 0
+                  ? (pieceId) => dispatch({ type: 'add-front-spur', hostEntryId: selectedUnit.entry.entryId, pieceId, select: true })
+                  : undefined
+              }
+              isMadeIn={(optionId, valueId) => unitIsMadeIn(payload, storefront.pieceOptionId, selectedUnit.entry.pieceId, optionId, valueId, selectedOwn)}
+              onSwap={(pieceId) => dispatch({ type: 'swap', entryId: selectedUnit.entry.entryId, pieceId })}
+              onChoose={(optionId, valueId) => dispatch({ type: 'set-unit-choice', entryId: selectedUnit.entry.entryId, optionId, valueId })}
+              onRemove={() => dispatch({ type: 'remove', entryId: selectedUnit.entry.entryId })}
+              onClose={() => onSelectUnit(null)}
+            />
+          </div>
         ) : null}
         </section>
 

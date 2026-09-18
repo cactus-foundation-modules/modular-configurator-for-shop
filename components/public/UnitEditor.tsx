@@ -1,6 +1,6 @@
 'use client'
 
-// The panel for one selected unit, opened in place under its row in the list:
+// The panel for one selected unit, opened under the row of unit pills:
 // swap it for another type that still fits, curve a backless curve the other
 // way, turn a backless unit beside a corner to line up with the row, give it
 // choices of its own (a contrasting fabric, say), or take it out.

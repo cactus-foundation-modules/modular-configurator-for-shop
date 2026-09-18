@@ -120,16 +120,22 @@ export const CONFIGURATOR_CSS = `
 .mcf-plan-dimension{fill:var(--color-text-muted);text-anchor:middle;dominant-baseline:central;font-variant-numeric:tabular-nums}
 .mcf-plan-dimension-line{stroke:var(--color-text-muted);stroke-width:1;vector-effect:non-scaling-stroke}
 .mcf-plan-empty{fill:var(--color-text-muted);text-anchor:middle;dominant-baseline:central}
-.mcf-units{display:grid;gap:.375rem;margin:0;padding:0;list-style:none}
-.mcf-unit{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.625rem;align-items:center;padding:.5rem .625rem;border:1px solid var(--color-border);border-radius:var(--radius-md,8px);background:var(--color-surface)}
-.mcf-unit[data-selected="true"]{border-color:var(--color-primary);box-shadow:inset 0 0 0 1px var(--color-primary)}
-.mcf-unit-number{display:grid;place-items:center;width:1.625rem;height:1.625rem;border-radius:50%;background:var(--color-bg-subtle);font-size:.75rem;font-weight:700;font-variant-numeric:tabular-nums}
-.mcf-unit-select{display:grid;gap:.1rem;min-width:0;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.mcf-units{display:flex;flex-wrap:wrap;gap:.375rem;margin:0;padding:0;list-style:none}
+.mcf-unit{display:flex;min-width:0;max-width:100%}
+.mcf-unit-select{display:inline-flex;align-items:center;gap:.5rem;min-width:0;max-width:100%;min-height:2.75rem;padding:.3rem .875rem .3rem .3rem;border:1px solid var(--color-border);border-radius:var(--radius-pill,999px);background:var(--color-surface);color:var(--color-text);font:inherit;text-align:left;cursor:pointer}
+.mcf-unit-select:hover{border-color:var(--color-primary);background:var(--color-primary-subtle)}
+.mcf-unit-select:focus-visible{outline:2px solid var(--color-border-focus,var(--color-primary));outline-offset:2px}
+.mcf-unit[data-problem="true"] .mcf-unit-select{border-color:var(--color-error)}
+.mcf-unit[data-selected="true"] .mcf-unit-select{border-color:var(--color-primary);background:var(--color-primary-subtle);box-shadow:inset 0 0 0 1px var(--color-primary)}
+.mcf-unit-number{flex:none;display:grid;place-items:center;width:1.75rem;height:1.75rem;border-radius:50%;background:var(--color-bg-subtle);color:var(--color-text);font-size:.75rem;font-weight:700;font-variant-numeric:tabular-nums}
+.mcf-unit[data-selected="true"] .mcf-unit-number,.mcf-unit-body-title .mcf-unit-number{background:var(--color-primary);color:var(--color-on-primary)}
+.mcf-unit-text{display:grid;gap:.05rem;min-width:0}
 .mcf-unit-name{font-weight:600;font-size:.875rem}
 .mcf-unit-detail{color:var(--color-text-muted);font-size:.75rem;overflow-wrap:anywhere}
 .mcf-unit-detail--problem{color:var(--color-error)}
 .mcf-unit-price{font-size:.8125rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
-.mcf-unit-body{grid-column:1/-1;min-width:0}
+.mcf-unit-body{display:grid;gap:.625rem;min-width:0;padding:.75rem;border:1px solid var(--color-primary);border-radius:var(--radius-md,8px);background:var(--color-surface);box-shadow:inset 0 0 0 1px var(--color-primary)}
+.mcf-unit-body-title{display:flex;align-items:center;gap:.5rem;margin:0;font-size:.875rem;font-weight:600}
 .mcf-unit-editor{display:grid;gap:.625rem;padding-top:.625rem;border-top:1px solid var(--color-border)}
 .mcf-swatches{display:flex;flex-wrap:wrap;gap:.375rem}
 .mcf-swatch{position:relative;display:grid;place-items:center;width:2.5rem;height:2.5rem;padding:0;border:2px solid var(--color-border);border-radius:50%;background:var(--color-bg-subtle);background-size:cover;background-position:center;cursor:pointer;overflow:hidden}
@@ -173,6 +179,6 @@ export const CONFIGURATOR_CSS = `
   .mcf-button--wide{flex-basis:100%}
 }
 @media (prefers-reduced-motion:no-preference){
-  .mcf-tab,.mcf-preset,.mcf-chip,.mcf-swatch,.mcf-button,.mcf-picker-option{transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
+  .mcf-tab,.mcf-preset,.mcf-chip,.mcf-unit-select,.mcf-swatch,.mcf-button,.mcf-picker-option{transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 }
 `
