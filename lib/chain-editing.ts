@@ -61,6 +61,8 @@ export type EditRefusal =
   | 'front-units-not-offered'
   /** Only a unit that makes sense on its own (a table, an armchair) can stand away from the layout. */
   | 'cannot-stand-free'
+  /** This range does not let units stand on their own. */
+  | 'free-units-not-offered'
   | 'unknown-entry'
   | 'unknown-piece'
 

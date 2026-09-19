@@ -52,7 +52,11 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
      beside the seats rather than a cube to stand in front of them leaves it off;
    - tick "Units on their own" (off by default) to let shoppers put a table, stool or armchair
      (a straight unit with no back, or with arms both sides) anywhere on the floor round the
-     layout, as many as the layout limit allows, and drag them about (`lib/free-units.ts`);
+     layout, as many as the layout limit allows, and drag them about (`lib/free-units.ts`).
+     A ready-made layout can carry them too, in its stored `free` list: each unit's slug, where
+     its middle stands in millimetres from the middle of the layout's first unit, and its turn
+     in degrees. The set-up screen draws them and keeps them through edits, but does not yet
+     place them - they are written into the stored set-up;
    - optionally write ready-made layouts, with a backless unit stood in front of any straight
      unit with a back where that setting allows it, and a backless unit beside a corner
      turned to line up with the row.

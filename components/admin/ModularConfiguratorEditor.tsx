@@ -268,6 +268,7 @@ export function ModularConfiguratorEditor({ productId }: { productId: string }) 
             labelBySlug={labelBySlug}
             maxPieces={config.maxPieces}
             frontUnits={config.frontUnits}
+            freeUnits={config.freeUnits}
             onChange={(presets) => changeConfig({ ...config, presets })}
           />
         </div>

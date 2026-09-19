@@ -13,7 +13,7 @@ import { getProductConfiguratorCached } from '@/modules/modular-configurator-for
 import { resolvePieceCatalogue, type ResolvedPiece } from '@/modules/modular-configurator-for-shop/lib/piece-catalogue'
 import { suggestPresets } from '@/modules/modular-configurator-for-shop/lib/suggested-presets'
 import { chainFromUnits, findChainProblem } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import { presetLayoutUnits } from '@/modules/modular-configurator-for-shop/lib/preset-units'
+import { presetFreeProblem, presetFreeUnits, presetLayoutUnits } from '@/modules/modular-configurator-for-shop/lib/preset-units'
 import type { ConfiguratorConfig } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 import type {
   ConfiguratorStorefrontPayload,
@@ -93,15 +93,21 @@ function presetsFor(
   pieces: readonly StorefrontPiece[],
 ): StorefrontPreset[] {
   const definitions = new Map(pieces.map((piece) => [piece.pieceId, piece.definition]))
-  const limits = { maxPieces: config.maxPieces, frontUnits: config.frontUnits }
+  const limits = { maxPieces: config.maxPieces, frontUnits: config.frontUnits, freeUnits: config.freeUnits }
   if (config.presets.length === 0) return suggestPresets(pieces.map((piece) => piece.definition), limits)
+  const idOf = (slug: string) => {
+    const pieceId = valueIdBySlug.get(slug)
+    return pieceId && definitions.has(pieceId) ? pieceId : undefined
+  }
   return config.presets.flatMap((preset) => {
-    const units = presetLayoutUnits(preset, (slug) => {
-      const pieceId = valueIdBySlug.get(slug)
-      return pieceId && definitions.has(pieceId) ? pieceId : undefined
-    })
+    const units = presetLayoutUnits(preset, idOf)
     if (!units) return []
-    return findChainProblem(chainFromUnits(units, 'preset-'), definitions, limits) === null ? [{ name: preset.name, units }] : []
+    if (findChainProblem(chainFromUnits(units, 'preset-'), definitions, limits) !== null) return []
+    // Units on their own that can no longer stand where they were put - the
+    // range switched them off, one was withdrawn - leave the layout itself offered.
+    const free = presetFreeUnits(preset, idOf)
+    const freeFits = free !== null && free.length > 0 && presetFreeProblem(units, free, definitions, limits) === null
+    return [{ name: preset.name, units, ...(freeFits ? { free } : {}) }]
   })
 }
 

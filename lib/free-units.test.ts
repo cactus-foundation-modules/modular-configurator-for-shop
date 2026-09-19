@@ -14,6 +14,8 @@ import {
   type FreeUnit,
 } from '@/modules/modular-configurator-for-shop/lib/free-units'
 import { decodeLayout, encodeLayout, type LayoutCodeVocabulary } from '@/modules/modular-configurator-for-shop/lib/layout-code'
+import { presetWithoutUnit, presetWithUnits } from '@/modules/modular-configurator-for-shop/lib/config-schema'
+import { presetFreeProblem } from '@/modules/modular-configurator-for-shop/lib/preset-units'
 
 const LEFT: PieceDefinition = { pieceId: 'left', shape: { kind: 'straight', closedLeft: true, closedRight: false }, widthMm: 650, depthMm: 690 }
 const CENTRAL: PieceDefinition = { pieceId: 'central', shape: { kind: 'straight', closedLeft: false, closedRight: false }, widthMm: 570, depthMm: 690 }
@@ -121,5 +123,28 @@ describe('layout code with units on their own', () => {
     const decoded = decodeLayout('brs-r.bts~free:oops', vocabulary)
     expect(decoded?.units).toHaveLength(2)
     expect(decoded?.units[1]?.free).toBeUndefined()
+  })
+})
+
+describe('ready-made layouts with units on their own', () => {
+  const limits = { maxPieces: 12, frontUnits: false, freeUnits: true }
+  const sofaUnits = [{ pieceId: 'left' }, { pieceId: 'central' }, { pieceId: 'right' }]
+
+  it('takes a coffee table in front of the sofa and refuses one on top of it', () => {
+    expect(presetFreeProblem(sofaUnits, [{ pieceId: 'table', spot: { x: 613, z: 1105, turnDegrees: 0 } }], DEFINITIONS, limits)).toBeNull()
+    expect(presetFreeProblem(sofaUnits, [{ pieceId: 'table', spot: { x: 613, z: 0, turnDegrees: 0 } }], DEFINITIONS, limits)).toBe('would-overlap')
+  })
+
+  it('refuses them where the range does not allow them, or for a unit that only joins a layout', () => {
+    const spot = { x: 0, z: 2000, turnDegrees: 0 }
+    expect(presetFreeProblem(sofaUnits, [{ pieceId: 'table', spot }], DEFINITIONS, { ...limits, freeUnits: false })).toBe('free-units-not-offered')
+    expect(presetFreeProblem(sofaUnits, [{ pieceId: 'central', spot }], DEFINITIONS, limits)).toBe('cannot-stand-free')
+    expect(presetFreeProblem(sofaUnits, [{ pieceId: 'table', spot }], DEFINITIONS, { ...limits, maxPieces: 3 })).toBe('too-many-pieces')
+  })
+
+  it('keeps them through an edit of the layout, and drops one whose unit is taken out of the range', () => {
+    const preset = { name: 'Lounge', valueSlugs: ['left', 'right'], free: [{ valueSlug: 'table', x: 0, z: 1200, turnDegrees: 0 }, { valueSlug: 'armchair', x: 0, z: 2400, turnDegrees: 180 }] }
+    expect(presetWithUnits(preset, [{ valueSlug: 'left' }, { valueSlug: 'central' }, { valueSlug: 'right' }]).free).toEqual(preset.free)
+    expect(presetWithoutUnit(preset, 'table').free).toEqual([preset.free[1]])
   })
 })

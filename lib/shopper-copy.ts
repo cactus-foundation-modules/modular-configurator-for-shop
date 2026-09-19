@@ -28,6 +28,8 @@ export function refusalSentence(refusal: EditRefusal, maxPieces: number): string
       return 'This range is not made to stand one unit in front of another.'
     case 'cannot-stand-free':
       return 'Only a table, stool or armchair can stand on its own, away from the layout.'
+    case 'free-units-not-offered':
+      return 'This range is not set up for units standing on their own.'
     case 'unknown-entry':
     case 'unknown-piece':
       return 'That unit is not available any more.'
@@ -59,6 +61,8 @@ export function refusalHint(refusal: EditRefusal, maxPieces: number): string {
       return 'Not made to stand in front of another unit'
     case 'cannot-stand-free':
       return 'Only joins a layout'
+    case 'free-units-not-offered':
+      return 'Not offered on its own'
     case 'unknown-entry':
     case 'unknown-piece':
       return 'No longer available'

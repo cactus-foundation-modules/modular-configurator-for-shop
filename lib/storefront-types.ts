@@ -2,6 +2,7 @@
 // JSON-serialisable data only: it crosses the server/client boundary as a prop,
 // and Puck deep-copies block props on the way in (a Date would arrive as {}).
 import type { LayoutUnitSpec } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
+import type { PresetFreeSpec } from '@/modules/modular-configurator-for-shop/lib/preset-units'
 import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { P3dFormat } from '@/modules/product-3d-views-for-shop/lib/formats'
 import type { PieceConfig, ViewSummaryChoice } from '@/modules/modular-configurator-for-shop/lib/config-schema'
@@ -26,6 +27,8 @@ export interface StorefrontPiece {
 export interface StorefrontPreset {
   name: string
   units: LayoutUnitSpec[]
+  /** Units standing on their own round it, by unit option value id. */
+  free?: PresetFreeSpec[]
 }
 
 /** The 3D views module's look, so the builder's scene matches the gallery's. */

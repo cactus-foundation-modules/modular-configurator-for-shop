@@ -6,7 +6,7 @@ import { chainFromUnits, findChainProblem } from '@/modules/modular-configurator
 import { canBeFrontSpur, canHostFrontSpur, segmentInset, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import { presetUnitsOf, type PieceConfig, type SaveConfiguratorBody } from '@/modules/modular-configurator-for-shop/lib/config-schema'
 import { sameOptionName } from '@/modules/modular-configurator-for-shop/lib/piece-catalogue'
-import { presetLayoutUnits } from '@/modules/modular-configurator-for-shop/lib/preset-units'
+import { presetFreeProblem, presetFreeUnits, presetLayoutUnits } from '@/modules/modular-configurator-for-shop/lib/preset-units'
 
 export interface OptionForValidation {
   name: string
@@ -61,6 +61,11 @@ export function validateConfigAgainstOptions(
     const specs = presetLayoutUnits(preset, (slug) => (definitions.has(slug) ? slug : undefined)) ?? []
     const problem = findChainProblem(chainFromUnits(specs, 'check-'), definitions, { maxPieces: config.maxPieces, frontUnits: config.frontUnits })
     if (problem) return `"${preset.name}" cannot be built: ${PRESET_PROBLEM_WORDING[problem]}`
+    const unknownFree = (preset.free ?? []).find((unit) => !definitions.has(unit.valueSlug))
+    if (unknownFree) return `"${preset.name}" uses ${labelOf(unknownFree.valueSlug)}, which is not set up as a unit`
+    const free = presetFreeUnits(preset, (slug) => (definitions.has(slug) ? slug : undefined)) ?? []
+    const freeProblem = presetFreeProblem(specs, free, definitions, { maxPieces: config.maxPieces, frontUnits: config.frontUnits, freeUnits: config.freeUnits })
+    if (freeProblem) return `"${preset.name}" cannot be built: ${PRESET_PROBLEM_WORDING[freeProblem]}`
   }
   return null
 }
@@ -102,6 +107,7 @@ const PRESET_PROBLEM_WORDING: Record<NonNullable<ReturnType<typeof findChainProb
   'neighbours-cannot-join': 'two neighbouring units meet arm to seat',
   'front-units-not-offered': 'it stands a unit in front of another, which this range is not set to allow',
   'cannot-stand-free': 'it stands a unit on its own that only joins a layout',
+  'free-units-not-offered': 'it stands a unit on its own, which this range is not set to allow. Switch "Units on their own" on, or take it out of the layout',
   'would-overlap': 'the units would sit on top of each other',
   'too-many-pieces': 'it has more units than the layout limit',
   'unknown-entry': 'it names a unit that is not set up',

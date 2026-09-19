@@ -16,7 +16,8 @@ import {
   type PresetConfig,
   type PresetUnit,
 } from '@/modules/modular-configurator-for-shop/lib/config-schema'
-import { presetLayoutUnits } from '@/modules/modular-configurator-for-shop/lib/preset-units'
+import { presetFreeProblem, presetFreeUnits, presetLayoutUnits, type PresetFreeSpec } from '@/modules/modular-configurator-for-shop/lib/preset-units'
+import { freeUnitFromSpot, placeFreeUnits } from '@/modules/modular-configurator-for-shop/lib/free-units'
 import { suggestPresets } from '@/modules/modular-configurator-for-shop/lib/suggested-presets'
 import { refusalSentence } from '@/modules/modular-configurator-for-shop/lib/shopper-copy'
 import { LayoutPlan } from '@/modules/modular-configurator-for-shop/components/public/LayoutPlan'
@@ -29,6 +30,8 @@ interface PresetListEditorProps {
   maxPieces: number
   /** Whether this range stands a backless unit in front of a backed one. */
   frontUnits: boolean
+  /** Whether this range lets units stand on their own. */
+  freeUnits: boolean
   onChange: (presets: PresetConfig[]) => void
 }
 
@@ -48,24 +51,31 @@ export function slugUnits(slugs: readonly string[]): LayoutUnitSpec[] {
   return slugs.map((pieceId) => ({ pieceId }))
 }
 
-export function PresetPreview({ units, definitions, labelBySlug, maxPieces, frontUnits }: {
+export function PresetPreview({ units, free = [], definitions, labelBySlug, maxPieces, frontUnits, freeUnits = false }: {
   /** Keyed by slug. */
   units: readonly LayoutUnitSpec[]
+  /** Units standing on their own round it, keyed by slug. */
+  free?: readonly PresetFreeSpec[]
   definitions: ReadonlyMap<string, PieceDefinition>
   labelBySlug: ReadonlyMap<string, string>
   maxPieces: number
   frontUnits: boolean
+  freeUnits?: boolean
 }) {
   const chain = chainFromUnits(units, 'preview-')
-  const problem = findChainProblem(chain, definitions, { maxPieces, frontUnits })
+  const limits = { maxPieces, frontUnits, freeUnits }
+  const problem = findChainProblem(chain, definitions, limits) ?? presetFreeProblem(units, free, definitions, limits)
   if (problem) return <p style={errorStyle}>{refusalSentence(problem, maxPieces)}</p>
   const labelFor = (slug: string) => labelBySlug.get(slug) ?? slug
+  const freePlaced = placeFreeUnits(free.map((unit, index) => freeUnitFromSpot(`preview-free-${index}`, unit.pieceId, unit.spot)), definitions)
+  const joined = units.map((unit) => (unit.frontPieceId ? `${labelFor(unit.pieceId)} with ${labelFor(unit.frontPieceId)} in front` : labelFor(unit.pieceId))).join(', ')
+  const onTheirOwn = free.length > 0 ? `; on their own: ${free.map((unit) => labelFor(unit.pieceId)).join(', ')}` : ''
   return (
     <LayoutPlan
       className="mcf-preset-plan"
-      placed={placeLayout(chain, definitions)}
+      placed={[...placeLayout(chain, definitions), ...freePlaced]}
       labelFor={labelFor}
-      description={units.map((unit) => (unit.frontPieceId ? `${labelFor(unit.pieceId)} with ${labelFor(unit.frontPieceId)} in front` : labelFor(unit.pieceId))).join(', ')}
+      description={`${joined}${onTheirOwn}`}
     />
   )
 }
@@ -84,7 +94,7 @@ function turnOfferedAt(units: readonly PresetUnit[], index: number, definitions:
   return besideCorner && definition.widthMm !== definition.depthMm
 }
 
-export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, frontUnits, onChange }: PresetListEditorProps) {
+export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, frontUnits, freeUnits, onChange }: PresetListEditorProps) {
   const definitions = definitionsBySlug(pieces)
   const labelFor = (slug: string) => labelBySlug.get(slug) ?? slug
   const update = (index: number, next: PresetConfig) => onChange(presets.map((preset, position) => (position === index ? next : preset)))
@@ -238,13 +248,22 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, fron
             </div>
           </div>
           {units.length > 0 ? (
-            <PresetPreview
-              units={presetLayoutUnits(preset, (slug) => slug) ?? []}
-              definitions={definitions}
-              labelBySlug={labelBySlug}
-              maxPieces={maxPieces}
-              frontUnits={frontUnits}
-            />
+            <>
+              <PresetPreview
+                units={presetLayoutUnits(preset, (slug) => slug) ?? []}
+                free={presetFreeUnits(preset, (slug) => slug) ?? []}
+                definitions={definitions}
+                labelBySlug={labelBySlug}
+                maxPieces={maxPieces}
+                frontUnits={frontUnits}
+                freeUnits={freeUnits}
+              />
+              {preset.free && preset.free.length > 0 ? (
+                <p style={hintStyle}>
+                  On their own: {preset.free.map((unit) => labelFor(unit.valueSlug)).join(', ')}. Their places are kept as they are when the layout is edited here.
+                </p>
+              ) : null}
+            </>
           ) : (
             <p style={hintStyle}>Add units to see it.</p>
           )}

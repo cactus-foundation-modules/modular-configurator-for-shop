@@ -20,7 +20,7 @@ import { taxViewAmounts, type ProductTaxView } from '@/modules/shop/lib/tax-view
 import { useVariationSelection } from '@/modules/shop-variations/lib/use-variation-selection'
 import type { PackedVariationBootstrap } from '@/modules/shop-variations/lib/variation-bootstrap-pack'
 import { layoutPieceCount, placeLayout, type FloorVector } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
-import { fitsAt, snapFloorPoint } from '@/modules/modular-configurator-for-shop/lib/free-units'
+import { fitsAt, freeUnitEntry, freeUnitFromSpot, placeFreeUnits, snapFloorPoint } from '@/modules/modular-configurator-for-shop/lib/free-units'
 import { decodeLayout, LAYOUT_PARAM } from '@/modules/modular-configurator-for-shop/lib/layout-code'
 import { priceLayout } from '@/modules/modular-configurator-for-shop/lib/layout-pricing'
 import { unitCountLabel } from '@/modules/modular-configurator-for-shop/lib/layout-describe'
@@ -136,12 +136,13 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
     if (!payload) return []
     return storefront.presets.map((preset, index) => {
       const chain = chainFromUnits(preset.units, `p${index}-`)
-      const price = priceLayout(payload, storefront.pieceOptionId, chain, layoutChoices, {})
+      const free = (preset.free ?? []).map((unit, position) => freeUnitFromSpot(`p${index}-free-${position}`, unit.pieceId, unit.spot))
+      const price = priceLayout(payload, storefront.pieceOptionId, [...chain, ...free.map(freeUnitEntry)], layoutChoices, {})
       return {
         key: String(index),
         name: preset.name,
-        placed: placeLayout(chain, definitions),
-        unitCountText: unitCountLabel(layoutPieceCount(chain)),
+        placed: [...placeLayout(chain, definitions), ...placeFreeUnits(free, definitions)],
+        unitCountText: unitCountLabel(layoutPieceCount(chain) + free.length),
         priceText: price.total > 0 ? formatMoney(price.total, selection.currencySymbol) : '',
         // Both sides of tax where the shopper's VAT switch is on (shop's
         // lib/tax-view-shared.ts), so a tile follows it like every other price.
@@ -314,6 +315,7 @@ export function LayoutBuilder({ storefront, bootstrap, intro }: LayoutBuilderPro
               ...(unit.cornered ? { cornered: unit.cornered } : {}),
               ...(unit.frontPieceId ? { front: { pieceId: unit.frontPieceId } } : {}),
             })),
+            free: (preset.free ?? []).map((unit) => ({ pieceId: unit.pieceId, spot: unit.spot })),
             byShopper: true,
           })
           setStatusText(null)

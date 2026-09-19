@@ -115,6 +115,19 @@ export const PresetUnitSchema = z.object({
   cornered: z.enum(['left', 'right']).optional(),
 })
 
+/**
+ * A unit of a ready-made layout standing on its own: where its middle is, in
+ * whole millimetres from the middle of the layout's first unit (x to the
+ * shopper's right as they face that unit, z towards them), and how far it is
+ * turned, in degrees - the same frame the layout link writes them in.
+ */
+export const PresetFreeUnitSchema = z.object({
+  valueSlug: ValueSlugSchema,
+  x: z.number().int().min(-20000).max(20000),
+  z: z.number().int().min(-20000).max(20000),
+  turnDegrees: z.number().min(0).max(360).default(0),
+})
+
 export const PresetConfigSchema = z.object({
   name: z.string().trim().min(1).max(60),
   /**
@@ -128,6 +141,8 @@ export const PresetConfigSchema = z.object({
    * those; read only while it names the same units, in the same order, as `valueSlugs`.
    */
   units: z.array(PresetUnitSchema).max(MAX_PIECES_CEILING).optional(),
+  /** Units standing on their own round the layout. Only offered where the range allows them. */
+  free: z.array(PresetFreeUnitSchema).max(MAX_PIECES_CEILING).optional(),
 })
 
 export const ConfiguratorConfigSchema = z.object({
@@ -161,6 +176,7 @@ export type PieceShapeConfig = z.infer<typeof PieceShapeSchema>
 export type PieceConfig = z.infer<typeof PieceConfigSchema>
 export type PresetConfig = z.infer<typeof PresetConfigSchema>
 export type PresetUnit = z.infer<typeof PresetUnitSchema>
+export type PresetFreeUnit = z.infer<typeof PresetFreeUnitSchema>
 
 /** A ready-made layout's units in full: its `units` while they match `valueSlugs`, else the plain list. */
 export function presetUnitsOf(preset: Pick<PresetConfig, 'valueSlugs' | 'units'>): PresetUnit[] {
@@ -179,7 +195,12 @@ export function presetWithUnits(preset: PresetConfig, units: readonly PresetUnit
     ...(unit.cornered ? { cornered: unit.cornered } : {}),
   }))
   const saysMore = tidy.some((unit) => unit.frontSlug !== undefined || unit.turned === true || unit.flipped === true || unit.cornered !== undefined)
-  const written: PresetConfig = { name: preset.name, valueSlugs: tidy.map((unit) => unit.valueSlug) }
+  // Units on their own are not in the order the layout joins, so they ride along untouched.
+  const written: PresetConfig = {
+    name: preset.name,
+    valueSlugs: tidy.map((unit) => unit.valueSlug),
+    ...(preset.free && preset.free.length > 0 ? { free: preset.free } : {}),
+  }
   return saysMore ? { ...written, units: tidy } : written
 }
 
@@ -188,7 +209,8 @@ export function presetWithoutUnit(preset: PresetConfig, valueSlug: string): Pres
   const units = presetUnitsOf(preset)
     .filter((unit) => unit.valueSlug !== valueSlug)
     .map((unit) => (unit.frontSlug === valueSlug ? { valueSlug: unit.valueSlug, turned: unit.turned, flipped: unit.flipped, cornered: unit.cornered } : unit))
-  return presetWithUnits(preset, units)
+  const free = preset.free?.filter((unit) => unit.valueSlug !== valueSlug)
+  return presetWithUnits({ ...preset, free }, units)
 }
 export type ConfiguratorConfig = z.infer<typeof ConfiguratorConfigSchema>
 
