@@ -98,6 +98,17 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, fron
   const definitions = definitionsBySlug(pieces)
   const labelFor = (slug: string) => labelBySlug.get(slug) ?? slug
   const update = (index: number, next: PresetConfig) => onChange(presets.map((preset, position) => (position === index ? next : preset)))
+  // Shoppers see the layouts in this order, so the owner sets it.
+  const move = (index: number, by: -1 | 1) => {
+    const target = index + by
+    const moving = presets[index]
+    const other = presets[target]
+    if (!moving || !other) return
+    const next = [...presets]
+    next[index] = other
+    next[target] = moving
+    onChange(next)
+  }
 
   if (pieces.length === 0) return <p style={hintStyle}>Tick at least one unit above first.</p>
 
@@ -241,7 +252,25 @@ export function PresetListEditor({ presets, pieces, labelBySlug, maxPieces, fron
                 ))}
               </div>
             ) : null}
-            <div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+              <button
+                type="button"
+                style={buttonStyle}
+                disabled={index === 0}
+                aria-label={`Move ${preset.name || 'this layout'} earlier`}
+                onClick={() => move(index, -1)}
+              >
+                ↑ Earlier
+              </button>
+              <button
+                type="button"
+                style={buttonStyle}
+                disabled={index === presets.length - 1}
+                aria-label={`Move ${preset.name || 'this layout'} later`}
+                onClick={() => move(index, 1)}
+              >
+                ↓ Later
+              </button>
               <button type="button" style={buttonStyle} onClick={() => onChange(presets.filter((_, at) => at !== index))}>
                 Remove this layout
               </button>

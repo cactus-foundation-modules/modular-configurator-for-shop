@@ -12,7 +12,7 @@ import { AUTOMATIC_MODEL_TURN } from '@/modules/modular-configurator-for-shop/li
 /** Largest footprint a single unit may declare, in millimetres (6 m). */
 export const MAX_UNIT_SIDE_MM = 6000
 /** Hard ceiling on a layout's size, whatever a set-up asks for. */
-export const MAX_PIECES_CEILING = 30
+export const MAX_PIECES_CEILING = 45
 export const DEFAULT_MAX_PIECES = 12
 
 /**

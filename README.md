@@ -135,7 +135,8 @@ the nearest combination it is made in, and its row says what it is in
   (both labels editable on the block). The page opens on the individual items; only a
   layout link opens the builder.
 - **In "Build a layout"**, the ready-made shapes drawn to scale and priced in the options
-  chosen on the page, and "Design your own". Choosing one starts the builder. **The layout
+  chosen on the page, after "Design your own" (always the first tile); the owner sets the
+  shapes' order with Earlier / Later on the set-up screen. Choosing one starts the builder. **The layout
   view takes over the product gallery's main picture** - 3D, or the plan from above, with
   overall sizes on or off - with a "Your layout" thumbnail leading the strip and the
   photographs still underneath it; clicking a photo shows the photo, and any change to the

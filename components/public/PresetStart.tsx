@@ -46,6 +46,13 @@ export function PresetStart({ intro, labelFor, presets, pricesInText, onStartPre
         </div>
       ) : null}
       <div className="mcf-presets">
+        {/* First, so a shopper who knows what they want is not sent past every ready-made shape to find it. */}
+        <button type="button" className="mcf-preset mcf-preset--own" onClick={onDesignOwn}>
+          <span className="mcf-plus" aria-hidden="true">
+            +
+          </span>
+          <span className="mcf-preset-name">Design your own</span>
+        </button>
         {presets.map((preset) => (
           <button key={preset.key} type="button" className="mcf-preset" onClick={() => onStartPreset(preset.key)}>
             <LayoutPlan className="mcf-preset-plan" placed={preset.placed} labelFor={labelFor} description="" />
@@ -59,12 +66,6 @@ export function PresetStart({ intro, labelFor, presets, pricesInText, onStartPre
             </span>
           </button>
         ))}
-        <button type="button" className="mcf-preset mcf-preset--own" onClick={onDesignOwn}>
-          <span className="mcf-plus" aria-hidden="true">
-            +
-          </span>
-          <span className="mcf-preset-name">Design your own</span>
-        </button>
       </div>
       {presets.length > 0 && pricesInText ? <p className="mcf-status">{pricesInText}</p> : null}
     </div>
