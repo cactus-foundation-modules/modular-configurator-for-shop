@@ -61,6 +61,13 @@
  * cushion, and two rows meeting round a cornered table may have their cushions
  * overhang each other without that counting as sitting on top of one another.
  *
+ * A straight unit the range marks as an END PIECE (a desk extension, a return)
+ * finishes the row at either end and nothing joins past it. At the start it is
+ * laid as it comes, joined through its right side; at the far end of a row of
+ * two or more it is TURNED ROUND, laid exactly where it would have gone and spun
+ * half a turn on the spot, so the same unit closes both ends. It never sits in
+ * the middle of a row, and two never join each other.
+ *
  * A backless straight unit can be TURNED a quarter: the walk then goes in through
  * its back and out through its front instead of its sides, and a join either
  * side of it lines up the middles of the two faces. Out of a corner, that stands
@@ -112,6 +119,8 @@ export type PieceShape =
       overhangMm?: number
       /** Backless units only: may be laid as a corner, with a row going off its front. */
       cornerable?: boolean
+      /** Finishes a row at either end, turned round at the far end; never in the middle. */
+      endPiece?: boolean
     }
   | {
       kind: 'corner'
@@ -204,6 +213,8 @@ export interface PlacedPiece {
   definition: PieceDefinition
   pose: PiecePose
   footprint: FloorRectangle
+  /** An end piece at the far end of the row, spun half a turn: its outer face is its entry face. */
+  turnedRound?: boolean
 }
 
 /** Which open end of the chain a new piece would join. */
@@ -477,15 +488,31 @@ function exitFaceOf(definition: PieceDefinition, lay: EntryLay): JoinFace {
   }
 }
 
-/** True when something may join before this piece. */
-export function acceptsJoinBefore(definition: PieceDefinition): boolean {
+/** True for a straight unit that finishes a row at either end (a desk extension). */
+export function isEndPiece(definition: PieceDefinition): boolean {
+  return definition.shape.kind === 'straight' && definition.shape.endPiece === true
+}
+
+/** True when the piece at `index` of a chain `length` long is an end piece laid turned round. */
+export function endPieceTurnedRound(definition: PieceDefinition, index: number, length: number): boolean {
+  return isEndPiece(definition) && length > 1 && index === length - 1
+}
+
+/**
+ * True when something may join before this piece. An end piece takes a join
+ * only on the side it is laid against the row: its left as it comes, its right
+ * once turned round at the far end, which then faces back along the row.
+ */
+export function acceptsJoinBefore(definition: PieceDefinition, turnedRound = false): boolean {
   const { shape } = definition
+  if (isEndPiece(definition)) return turnedRound
   return (shape.kind !== 'straight' && shape.kind !== 'segment') || !shape.closedLeft
 }
 
 /** True when something may join after this piece. */
-export function acceptsJoinAfter(definition: PieceDefinition): boolean {
+export function acceptsJoinAfter(definition: PieceDefinition, turnedRound = false): boolean {
   const { shape } = definition
+  if (isEndPiece(definition)) return !turnedRound
   return (shape.kind !== 'straight' && shape.kind !== 'segment') || !shape.closedRight
 }
 
@@ -635,20 +662,23 @@ export function placeChain(
   definitions: ReadonlyMap<string, PieceDefinition>,
 ): PlacedPiece[] {
   const placed: PlacedPiece[] = []
-  for (const entry of chain) {
+  chain.forEach((entry, index) => {
     const definition = definitions.get(entry.pieceId)
     if (!definition) throw new UnknownPieceError(entry.pieceId)
     const previous = placed[placed.length - 1]
-    const pose: PiecePose = previous
+    const joined: PiecePose = previous
       ? poseJoinedAfter(previous, definition, entry)
       : { centre: { x: 0, z: 0 }, rotationY: 0 }
-    placed.push({ entry, definition, pose, footprint: footprintAt(definition, pose, entry.flipped) })
-  }
+    // Spun on the spot, so its box - and so its footprint - stays where it was.
+    const turnedRound = endPieceTurnedRound(definition, index, chain.length)
+    const pose = turnedRound ? { centre: joined.centre, rotationY: snapTurn(joined.rotationY + Math.PI) } : joined
+    placed.push({ entry, definition, pose, footprint: footprintAt(definition, pose, entry.flipped), ...(turnedRound ? { turnedRound: true } : {}) })
+  })
   return placed
 }
 
 export function canHostFrontSpur(definition: PieceDefinition): boolean {
-  return definition.shape.kind === 'straight' && definition.shape.backless !== true
+  return definition.shape.kind === 'straight' && definition.shape.backless !== true && definition.shape.endPiece !== true
 }
 
 export function canBeFrontSpur(definition: PieceDefinition): boolean {
@@ -749,7 +779,7 @@ function sameDirection(first: FloorVector, second: FloorVector): boolean {
 export function layoutIsClosed(placed: readonly PlacedPiece[]): boolean {
   const first = placed[0]
   const last = placed[placed.length - 1]
-  if (!first || !last || placed.length < 2) return false
+  if (!first || !last || placed.length < 2 || last.turnedRound) return false
   const entry = transformFace(entryFaceOf(first.definition, first.entry), first.pose)
   const exit = transformFace(exitFaceOf(last.definition, last.entry), last.pose)
   return (
@@ -811,7 +841,9 @@ export function layoutBounds(placed: readonly PlacedPiece[]): FloorRectangle | n
  * `end` is the chain's last piece (its exit face) or first (its entry face).
  */
 export function endSpaceOutline(piece: PlacedPiece, end: ChainEnd): FloorVector[] {
-  const local = end === 'end' ? exitFaceOf(piece.definition, piece.entry) : entryFaceOf(piece.definition, piece.entry)
+  // An end piece turned round faces out of the row through the side it would have come in by.
+  const outer: ChainEnd = piece.turnedRound ? (end === 'end' ? 'start' : 'end') : end
+  const local = outer === 'end' ? exitFaceOf(piece.definition, piece.entry) : entryFaceOf(piece.definition, piece.entry)
   const face = transformFace(local, piece.pose)
   // The face runs from its back corner towards the front for as long as the
   // piece's own outline stays on it.

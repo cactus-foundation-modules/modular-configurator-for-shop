@@ -9,6 +9,7 @@ export type ShapeChoice =
   | 'left-end'
   | 'right-end'
   | 'standalone'
+  | 'end-piece'
   | 'corner-back-left'
   | 'corner-back-right'
   | 'curve-back-outside'
@@ -32,6 +33,7 @@ export const SHAPE_CHOICES: ReadonlyArray<{ value: ShapeChoice; label: string }>
   { value: 'left-end', label: 'Arm on the left - starts a row' },
   { value: 'right-end', label: 'Arm on the right - finishes a row' },
   { value: 'standalone', label: 'Arms both sides - stands alone' },
+  { value: 'end-piece', label: 'End piece - finishes either end of a row, turned round on the right' },
   { value: 'corner-back-left', label: 'Corner - second back on its left' },
   { value: 'corner-back-right', label: 'Corner - second back on its right' },
   { value: 'curve-back-outside', label: 'Curve - back on the outside, seats face in' },
@@ -85,6 +87,8 @@ export function shapeFromChoice(choice: ShapeChoice, previous?: PieceShapeConfig
       return { kind: 'straight', closedLeft: false, closedRight: true, ...overhang }
     case 'standalone':
       return { kind: 'straight', closedLeft: true, closedRight: true, ...overhang }
+    case 'end-piece':
+      return { kind: 'straight', closedLeft: false, closedRight: false, endPiece: true }
     case 'corner-back-left':
       return { kind: 'corner', backSide: 'left' }
     case 'corner-back-right':
@@ -136,6 +140,7 @@ export function choiceFromShape(shape: PieceShapeConfig): ShapeChoice {
       return `segment-back-${shape.back}${end}`
     }
     case 'straight':
+      if (shape.endPiece) return 'end-piece'
       if (shape.closedLeft && shape.closedRight) return 'standalone'
       if (shape.closedLeft) return 'left-end'
       if (shape.closedRight) return 'right-end'
@@ -170,6 +175,8 @@ export function guessShapeFromLabel(label: string): ShapeChoice {
     return `segment-back-${back}${end}`
   }
   if (name.includes('corner')) return 'corner-back-left'
+  // A desk's extension or return hangs off either end of the run.
+  if (/\bexten[st]ions?\b|\bend piece\b/.test(name)) return 'end-piece'
   if (/\bleft\b/.test(name)) return 'left-end'
   if (/\bright\b/.test(name)) return 'right-end'
   return backless ? 'middle-backless' : 'middle'

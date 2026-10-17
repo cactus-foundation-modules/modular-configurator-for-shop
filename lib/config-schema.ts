@@ -32,6 +32,8 @@ const StraightShapeSchema = z.object({
   overhangMm: z.number().int().min(0).max(MAX_UNIT_SIDE_MM).optional(),
   /** Backless units: may be laid as a corner, with the next row going off its front. */
   cornerable: z.boolean().optional(),
+  /** Finishes a row at either end (a desk extension), turned round at the far end. */
+  endPiece: z.boolean().optional(),
 })
 
 const CornerShapeSchema = z.object({

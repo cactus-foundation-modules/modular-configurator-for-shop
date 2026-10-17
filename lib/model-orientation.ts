@@ -122,7 +122,10 @@ function templateAt(definition: PieceDefinition, flipped: boolean, x: number, z:
       const back = !shape.backless && z < -depth / 2 + depth * BACK_SHARE
       const leftArm = shape.closedLeft && x < -width / 2 + width * ARM_SHARE
       const rightArm = shape.closedRight && x > width / 2 - width * ARM_SHARE
-      return { covered: true, tall: back || leftArm || rightArm }
+      // An end piece is drawn as it is laid at the start of a row: flat against
+      // the row on its right, its free end (a desk extension's rounded top) on its left.
+      const covered = shape.endPiece !== true || x >= 0 || (x / (width / 2)) ** 2 + (z / (depth / 2)) ** 2 <= 1
+      return { covered, tall: covered && (back || leftArm || rightArm) }
     }
     case 'corner': {
       const back = z < -depth / 2 + depth * BACK_SHARE

@@ -36,7 +36,8 @@ behind a `to_regclass` probe; on a shop without it the sizes are simply typed in
    - tick **Show the layout builder on this product**;
    - pick the option whose values are the units;
    - tick each unit and say how it joins - no arms (with or without a back), arm on the
-     left, arm on the right, arms both sides, a corner with its second back on the left or
+     left, arm on the right, arms both sides, an end piece (a desk extension that finishes
+     either end of the run), a corner with its second back on the left or
      right, a quarter-circle or half-circle curve with its back outside, inside or no back at
      all, a rounded end that wraps one row round to the row behind it, or a wedge (a
      straight-sided, tapered segment) with its back on the wide side, the narrow side or no
@@ -98,6 +99,10 @@ product photographs show them). So:
 
 - a unit with an arm on its left can only start a layout, one with an arm on its right
   can only finish it;
+- an end piece (a desk extension, say) finishes the run at either end. At the start it is
+  laid as its model comes, so set the model up flat against the run on its right; at the far
+  end it is spun half a turn on the spot. Nothing joins past it - a unit added at that end
+  goes just inside it, as with an arm unit - it never sits mid-run, and two never join;
 - a corner turns the chain towards the seats' front, and the unit after it always lands
   against the corner's open side with its back in line with the corner's second back;
 - a curve with its back outside turns towards the seats' front too (three make a booth),

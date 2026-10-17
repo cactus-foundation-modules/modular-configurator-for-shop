@@ -7,7 +7,7 @@
 // wedges' own angle - how many it takes to bend a quarter, a half or all the way
 // round. No names of any particular range are assumed.
 import { findChainProblem, type ChainLimits } from '@/modules/modular-configurator-for-shop/lib/chain-editing'
-import type { PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
+import { isEndPiece, type PieceDefinition } from '@/modules/modular-configurator-for-shop/lib/chain-geometry'
 import type { StorefrontPreset } from '@/modules/modular-configurator-for-shop/lib/storefront-types'
 
 type Role =
@@ -128,6 +128,8 @@ function roleOf(definition: PieceDefinition): Role | null {
     case 'round-end':
       return 'roundEnd'
     case 'straight':
+      // Taken up as either end below, only where the range has no arm unit for it.
+      if (shape.endPiece) return null
       if (shape.closedLeft && shape.closedRight) return null
       if (shape.closedLeft) return 'leftEnd'
       if (shape.closedRight) return 'rightEnd'
@@ -148,6 +150,10 @@ export function suggestPresets(definitions: readonly PieceDefinition[], limits: 
     const role = roleOf(definition)
     if (role && preferredFor(role, firstByRole.get(role), definition)) firstByRole.set(role, definition)
   }
+  // An end piece (a desk extension) finishes either end, where the range has no arm unit for it.
+  const endPiece = definitions.find(isEndPiece)
+  if (endPiece && !firstByRole.has('leftEnd')) firstByRole.set('leftEnd', endPiece)
+  if (endPiece && !firstByRole.has('rightEnd')) firstByRole.set('rightEnd', endPiece)
   const definitionsById = new Map(definitions.map((definition) => [definition.pieceId, definition]))
   const presets: StorefrontPreset[] = []
   for (const recipe of RECIPES) {

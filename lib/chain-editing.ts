@@ -14,6 +14,8 @@ import {
   canBeTurned,
   canTurnCorner,
   boundsOfOutline,
+  endPieceTurnedRound,
+  isEndPiece,
   canHostFrontSpur,
   endSpaceOutline,
   floorBoundary,
@@ -172,8 +174,14 @@ export function chainFromUnits(units: readonly LayoutUnitSpec[], idPrefix: strin
   }))
 }
 
-export function canJoin(before: PieceDefinition, after: PieceDefinition): boolean {
-  return acceptsJoinAfter(before) && acceptsJoinBefore(after)
+/**
+ * `afterTurnedRound`: the later piece is an end piece laid turned round at the
+ * far end of the row. The earlier one never is - nothing comes after that.
+ * Two end pieces never join each other: each finishes a row of something else.
+ */
+export function canJoin(before: PieceDefinition, after: PieceDefinition, afterTurnedRound = false): boolean {
+  if (isEndPiece(before) && isEndPiece(after)) return false
+  return acceptsJoinAfter(before) && acceptsJoinBefore(after, afterTurnedRound)
 }
 
 /** First problem with a whole chain, or null when it is a buildable layout. */
@@ -184,10 +192,10 @@ export function findChainProblem(
 ): EditRefusal | null {
   if (layoutPieceCount(chain) > limits.maxPieces) return 'too-many-pieces'
   let previous: PieceDefinition | null = null
-  for (const entry of chain) {
+  for (const [index, entry] of chain.entries()) {
     const definition = definitions.get(entry.pieceId)
     if (!definition) return 'unknown-piece'
-    if (previous && !canJoin(previous, definition)) return 'neighbours-cannot-join'
+    if (previous && !canJoin(previous, definition, endPieceTurnedRound(definition, index, chain.length))) return 'neighbours-cannot-join'
     if (entry.turned && !canBeTurned(definition)) return 'cannot-turn'
     if (entry.cornered && (entry.turned || !canTurnCorner(definition))) return 'cannot-corner'
     if (entry.frontSpur) {
@@ -235,7 +243,8 @@ export function endPlan(
   const edge = end === 'end' ? last : first
   const edgeDefinition = definitions.get(edge.pieceId)
   if (!edgeDefinition) return null
-  const open = end === 'end' ? acceptsJoinAfter(edgeDefinition) : acceptsJoinBefore(edgeDefinition)
+  // The last piece of a row of two or more is the one an end piece is turned round as.
+  const open = end === 'end' ? acceptsJoinAfter(edgeDefinition, endPieceTurnedRound(edgeDefinition, chain.length - 1, chain.length)) : acceptsJoinBefore(edgeDefinition)
   if (open) return { insertAt: end === 'end' ? chain.length : 0, displacedEntryId: null }
   // A lone unit with an arm is extended from its open side, which the other end
   // already offers; offering it here too would be the same space twice.
