@@ -404,12 +404,15 @@ function planShapeOf(piece: PlacedPiece): { body: ReactElement; numberAt: FloorV
         ),
         numberAt: { x: 0, z: back / 2 },
       }
-    case 'straight':
+    case 'straight': {
+      // An end piece (a desk extension) has no backrest to draw; and at the far end of a row it is spun
+      // half a turn, which would otherwise put the strip along the front.
+      const hasBack = !shape.backless && !shape.endPiece
       return {
         body: (
           <>
             <rect className="mcf-plan-unit" x={-width / 2} y={-depth / 2} width={width} height={depth} rx={Math.min(width, depth) * 0.05} />
-            {shape.backless ? null : <rect className="mcf-plan-back" x={-width / 2} y={-depth / 2} width={width} height={back} />}
+            {!hasBack ? null : <rect className="mcf-plan-back" x={-width / 2} y={-depth / 2} width={width} height={back} />}
             {shape.closedLeft ? (
               <rect className="mcf-plan-arm" x={-width / 2} y={-depth / 2 + back} width={arm} height={depth - back} />
             ) : null}
@@ -418,8 +421,9 @@ function planShapeOf(piece: PlacedPiece): { body: ReactElement; numberAt: FloorV
             ) : null}
           </>
         ),
-        numberAt: { x: 0, z: shape.backless ? 0 : back / 2 },
+        numberAt: { x: 0, z: hasBack ? back / 2 : 0 },
       }
+    }
   }
 }
 
